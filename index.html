@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#3b82f6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>ระบบบันทึกสถิติการมาเรียน - โรงเรียนประชาสามัคคี</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Sarabun', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                200: '#bfdbfe',
+                300: '#93c5fd',
+                400: '#60a5fa',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+                800: '#1e40af',
+                900: '#1e3a8a',
+                950: '#172554',
+              },
+              official: {
+                blue: '#0f172a',
+                light: '#f8fafc',
+                accent: '#3b82f6',
+                dark: '#020617',
+              }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.4s ease-out forwards',
+              'slide-up': 'slideUp 0.4s ease-out forwards',
+              'spin-slow': 'spin 8s linear infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(15px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        font-family: 'Sarabun', sans-serif;
+        background-color: #F3F4F6; /* Soft Gray - Eye friendly */
+        color: #111827; /* Gray 900 - Near Black */
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* Force date inputs to be light theme so icons are dark/visible on white bg */
+      input[type="date"] {
+        color-scheme: light;
+        cursor: pointer;
+      }
+
+      /* Explicitly style the calendar picker indicator to be dark (visible on white) */
+      ::-webkit-calendar-picker-indicator {
+        filter: invert(0); /* 0 = Black, 1 = White */
+        opacity: 0.6;
+        cursor: pointer;
+      }
+      ::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+      }
+      
+      /* Modern Thin Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #F3F4F6;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #9CA3AF; /* Gray 400 */
+        border-radius: 10px;
+        border: 2px solid #F3F4F6;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6B7280; /* Gray 500 */
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+         width: 6px;
+      }
+
+      /* Hover Scrollbar - visible on hover for desktop, normal scrolling for touch */
+      .hover-scrollbar {
+        overflow-y: auto;
+      }
+      .hover-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .hover-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      /* Desktop/Mouse: Hide thumb by default, show on hover */
+      @media (hover: hover) {
+        .hover-scrollbar::-webkit-scrollbar-thumb {
+          background-color: transparent;
+          border-radius: 10px;
+        }
+        .hover-scrollbar:hover::-webkit-scrollbar-thumb {
+          background-color: #9CA3AF;
+        }
+        /* Firefox */
+        .hover-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+        }
+        .hover-scrollbar:hover {
+          scrollbar-color: #9CA3AF transparent;
+        }
+      }
+
+      /* Mobile/Touch: Standard appearance or minimal */
+      @media (hover: none) {
+        .hover-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #E5E7EB;
+          border-radius: 10px;
+        }
+      }
+
+      /* Hide Scrollbar classes */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      /* Smooth Scrolling for Carousel */
+      .snap-x {
+        scroll-behavior: smooth;
+      }
+
+      @media print {
+        .no-print { display: none !important; }
+        .print-only { display: block !important; }
+        body { background-color: white; }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

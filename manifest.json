@@ -1,0 +1,16 @@
+{
+  "short_name": "SmartCheck",
+  "name": "ระบบเช็คชื่อโรงเรียนประชาสามัคคี",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#3b82f6",
+  "background_color": "#F3F4F6",
+  "orientation": "portrait"
+}
