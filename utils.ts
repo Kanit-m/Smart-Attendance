@@ -1,4 +1,5 @@
-import { DocumentData } from 'firebase/firestore';
+
+import { DocumentData } from 'firebase/firestore/lite';
 import { Student, Gender } from './types';
 
 export const mapStudentData = (id: string, data: DocumentData): Student => {

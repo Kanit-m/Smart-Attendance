@@ -6,7 +6,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { TeacherPanel } from './components/TeacherPanel';
 import { LoginModal } from './components/LoginModal';
 import { Role, AppUser } from './types';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
 
@@ -138,7 +138,7 @@ function App() {
 
         {view === 'teacher' && (
           <div className="animate-fade-in">
-            <div className="mb-6">
+            <div className="mb-6 print:hidden">
                <h2 className="text-2xl font-bold text-gray-800">ระบบครู</h2>
                <p className="text-gray-500">บันทึกการมาเรียนและรายงานสถิติ</p>
             </div>

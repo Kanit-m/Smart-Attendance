@@ -7,8 +7,8 @@ import {
 import { 
   collection, addDoc, getDocs, deleteDoc, doc, getDoc,
   query, where, writeBatch, updateDoc, setDoc 
-} from 'firebase/firestore';
-import { initializeApp, deleteApp } from 'firebase/app';
+} from 'firebase/firestore/lite';
+import * as firebaseApp from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, firebaseConfig } from '../firebase';
 import { Student, TeacherForm, Gender, Role, AppUser, Holiday } from '../types';
@@ -261,7 +261,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         if (!cleanUsername || !cleanPassword || cleanPassword.length < 6) return showToast("ข้อมูลไม่ถูกต้อง", 'error');
 
         setLoadingAction(true);
-        const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+        const secondaryApp = (firebaseApp as any).initializeApp(firebaseConfig, "SecondaryApp");
         const secondaryAuth = getAuth(secondaryApp);
         try {
             const userCred = await createUserWithEmailAndPassword(secondaryAuth, `${cleanUsername}@school.local`, cleanPassword);
@@ -272,14 +272,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
                 assignedClass: newTeacher.assignedClass 
             };
             await setDoc(doc(db, 'users', userCred.user.uid), newUser);
-            await signOut(secondaryAuth); await deleteApp(secondaryApp);
+            await signOut(secondaryAuth); await (firebaseApp as any).deleteApp(secondaryApp);
             
             setTeachers(prev => [...prev, { id: userCred.user.uid, ...newUser } as AppUser]);
             showToast(`เพิ่มบัญชีสำเร็จ`, 'success'); 
             setNewTeacher({ name: '', assignedClass: GRADE_OPTIONS[0], username: '', password: '' });
         } catch (err: any) { 
             showToast(err.code === 'auth/email-already-in-use' ? "Username ซ้ำ" : "Error", 'error'); 
-            try { await deleteApp(secondaryApp); } catch(e){} 
+            try { await (firebaseApp as any).deleteApp(secondaryApp); } catch(e){} 
         } finally { 
             setLoadingAction(false); 
         }

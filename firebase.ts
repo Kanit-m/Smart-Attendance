@@ -1,5 +1,5 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import * as firebaseApp from "firebase/app";
+import { getFirestore } from "firebase/firestore/lite";
 import { getAuth } from "firebase/auth";
 
 export const firebaseConfig = {
@@ -12,6 +12,8 @@ export const firebaseConfig = {
   measurementId: "G-9ZFW3LE63X"
 };
 
-const app = initializeApp(firebaseConfig);
+// Cast firebaseApp to any to bypass "Module has no exported member" errors 
+// which occur due to version mismatches or type definition issues in some environments.
+const app = (firebaseApp as any).initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);

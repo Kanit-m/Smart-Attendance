@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState } from 'react';
 import { 
   Users, UserCheck, UserX, Sun, 
   ChevronRight, ChevronLeft, LayoutGrid, 
-  Baby, BookOpen, Activity, CalendarDays, Sparkles
+  Baby, BookOpen, Activity, CalendarDays, Sparkles, Download
 } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday } from '../types';
 import { mapStudentData } from '../utils';
@@ -19,6 +20,8 @@ interface GradeStats {
     female: number;
     total: number;
     present: number;
+    presentMale: number;
+    presentFemale: number;
     absent: number;
     absentMale: number;
     absentFemale: number;
@@ -103,10 +106,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
       const absentMale = absentRecords.filter(a => a.gender === Gender.MALE).length;
       const absentFemale = absentRecords.filter(a => a.gender === Gender.FEMALE).length;
       
-      const presentCount = attendances.filter(a =>
+      const presentRecords = attendances.filter(a =>
          a.grade === grade &&
          (a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE)
-      ).length;
+      );
+      const presentCount = presentRecords.length;
+      const presentMale = presentRecords.filter(a => a.gender === Gender.MALE).length;
+      const presentFemale = presentRecords.filter(a => a.gender === Gender.FEMALE).length;
 
       return { 
         grade, 
@@ -115,6 +121,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
         total: studentsInGrade.length, 
         absent: absentCount, 
         present: presentCount,
+        presentMale,
+        presentFemale,
         absentMale,
         absentFemale,
         absentList: absentRecords
@@ -166,6 +174,85 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
       // Reset
       setTouchStart(0);
       setTouchEnd(0);
+  };
+
+  // Export CSV Function
+  const handleExportCSV = () => {
+    if (loading || allStats.length === 0) return;
+
+    // Define CSV Headers based on report structure with 'Total' columns set to 0
+    const headers = [
+      'ชั้น',
+      'เต็ม ชาย',
+      'เต็ม หญิง',
+      'เต็ม รวม',
+      'มา ชาย',
+      'มา หญิง',
+      'มา รวม',
+      'ขาด ชาย',
+      'ขาด หญิง',
+      'ขาด รวม'
+    ];
+
+    // Map data to rows
+    const rows = allStats.map((stat, index) => {
+        return [
+            `"${stat.grade}"`,
+            stat.male,
+            stat.female,
+            0, // Request: Show 0
+            stat.presentMale,
+            stat.presentFemale,
+            0, // Request: Show 0
+            stat.absentMale,
+            stat.absentFemale,
+            0  // Request: Show 0
+        ].join(',');
+    });
+
+    // Calculate Summary Row
+    const grandTotal = allStats.reduce((acc, curr) => ({
+        male: acc.male + curr.male,
+        female: acc.female + curr.female,
+        presentMale: acc.presentMale + curr.presentMale,
+        presentFemale: acc.presentFemale + curr.presentFemale,
+        absentMale: acc.absentMale + curr.absentMale,
+        absentFemale: acc.absentFemale + curr.absentFemale
+    }), { 
+        male: 0, female: 0, 
+        presentMale: 0, presentFemale: 0, 
+        absentMale: 0, absentFemale: 0 
+    });
+
+    const summaryRow = [
+        '"รวมทั้งสิ้น"',
+        grandTotal.male,
+        grandTotal.female,
+        0, // Request: Show 0
+        grandTotal.presentMale,
+        grandTotal.presentFemale,
+        0, // Request: Show 0
+        grandTotal.absentMale,
+        grandTotal.absentFemale,
+        0  // Request: Show 0
+    ].join(',');
+
+    // Combine all parts
+    const csvContent = [headers.join(','), ...rows, summaryRow].join('\n');
+
+    // Create Blob with BOM for Excel UTF-8 support
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Create download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `attendance_report_${currentDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
   };
 
   if (loading) {
@@ -224,7 +311,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
                                         <span className="text-xs font-bold text-emerald-700">มาเรียน</span>
                                         <UserCheck className="w-3 h-3 text-emerald-500"/>
                                     </div>
-                                    <div className="text-xl font-bold text-emerald-600">{stat.present}</div>
+                                    <div className="flex items-baseline gap-2">
+                                        <div className="text-xl font-bold text-emerald-600">{stat.present}</div>
+                                        <div className="text-[10px] font-medium text-emerald-400">
+                                           (ช {stat.presentMale} / ญ {stat.presentFemale})
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="bg-rose-50 rounded-xl p-2 border border-rose-100">
                                     <div className="flex items-center justify-between mb-1">
@@ -265,9 +357,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 text-xs gap-1 opacity-60">
-                                            <UserCheck className="w-6 h-6"/>
-                                            <span>มาครบทุกคน</span>
+                                        <div className="flex flex-col items-center justify-center h-full text-emerald-600 text-xs gap-2 opacity-90">
+                                            <div className="bg-emerald-100 p-2 rounded-full">
+                                                <UserCheck className="w-5 h-5 text-emerald-600"/>
+                                            </div>
+                                            <span className="font-bold">มาครบทุกคน</span>
                                         </div>
                                     )}
                                 </div>
@@ -308,23 +402,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
             <h2 className="text-3xl font-bold text-black">ภาพรวมสถานศึกษา</h2>
          </div>
          
-         {/* DATE PICKER COMPONENT */}
-         <div className="relative group">
-             <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 hover:border-brand-400 hover:shadow-md transition-all cursor-pointer">
-                 <CalendarDays className="w-5 h-5 text-brand-600 group-hover:text-brand-700" />
-                 <div className="flex flex-col items-start">
-                     <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-0.5">วันที่ข้อมูล</span>
-                     <span className="text-sm font-bold text-black group-hover:text-brand-800 leading-none">
-                        {new Date(currentDate).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                     </span>
+         <div className="flex flex-col sm:flex-row items-center gap-3">
+             {/* Export Button */}
+             <button 
+                onClick={handleExportCSV}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
+             >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+             </button>
+
+             {/* DATE PICKER COMPONENT */}
+             <div className="relative group w-full sm:w-auto">
+                 <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 hover:border-brand-400 hover:shadow-md transition-all cursor-pointer">
+                     <CalendarDays className="w-5 h-5 text-brand-600 group-hover:text-brand-700" />
+                     <div className="flex flex-col items-start">
+                         <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-0.5">วันที่ข้อมูล</span>
+                         <span className="text-sm font-bold text-black group-hover:text-brand-800 leading-none">
+                            {new Date(currentDate).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                         </span>
+                     </div>
+                     {/* Invisible Date Input covering the area */}
+                     <input 
+                        type="date" 
+                        value={currentDate}
+                        onChange={(e) => setCurrentDate(e.target.value)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                     />
                  </div>
-                 {/* Invisible Date Input covering the area */}
-                 <input 
-                    type="date" 
-                    value={currentDate}
-                    onChange={(e) => setCurrentDate(e.target.value)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                 />
              </div>
          </div>
       </div>
@@ -435,7 +540,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
              <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-black flex items-center gap-2">
                     <UserX className="w-5 h-5 text-rose-500" /> 
-                    รายการผู้ไม่มาเรียน (รวม)
+                    รายชื่อนักเรียนที่ขาดเรียน (รวม)
                 </h3>
                 {totalAbsent > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-bold">{totalAbsent} คน</span>}
              </div>
@@ -455,11 +560,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
                 {/* Scrollable List */}
                 <div className="overflow-y-auto flex-1 p-2 hover-scrollbar">
                      {totalAbsent === 0 ? (
-                         <div className="h-40 flex flex-col items-center justify-center text-gray-400 gap-2">
-                             <div className="p-3 bg-emerald-50 rounded-full text-emerald-400">
+                         <div className="h-40 flex flex-col items-center justify-center text-emerald-600 gap-2">
+                             <div className="p-3 bg-emerald-50 rounded-full text-emerald-500">
                                 <UserCheck className="w-8 h-8" />
                              </div>
-                             <p className="text-sm">สุดยอด! วันนี้มาเรียนครบทุกคน</p>
+                             <p className="text-sm font-bold">สุดยอด! วันนี้มาเรียนครบทุกคน</p>
                          </div>
                      ) : (
                          <div className="space-y-2">
