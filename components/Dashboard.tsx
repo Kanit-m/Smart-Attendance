@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { 
   Users, UserCheck, UserX, Sun, 
   ChevronRight, ChevronLeft, LayoutGrid, 
-  Baby, BookOpen, Activity, CalendarDays, Sparkles, Download
+  Baby, BookOpen, Activity, CalendarDays, Sparkles, Download,
+  ClipboardCheck, AlertTriangle, Clock
 } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
 import { db } from '../firebase';
@@ -26,6 +27,7 @@ interface GradeStats {
     absentMale: number;
     absentFemale: number;
     absentList: AttendanceRecord[];
+    isSubmitted: boolean;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
@@ -125,7 +127,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
         presentFemale,
         absentMale,
         absentFemale,
-        absentList: absentRecords
+        absentList: absentRecords,
+        isSubmitted: presentCount + absentCount > 0
       };
     });
   };
@@ -133,6 +136,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
   const allStats = getStudentStatsByGrade();
   const kStats = allStats.filter(s => s.grade.includes('อนุบาล'));
   const pStats = allStats.filter(s => !s.grade.includes('อนุบาล'));
+  
+  // Missing Data Logic
+  const totalClasses = allStats.length;
+  const submittedClasses = allStats.filter(s => s.isSubmitted).length;
+  const missingClasses = allStats.filter(s => !s.isSubmitted);
+  const isAllSubmitted = totalClasses > 0 && submittedClasses === totalClasses;
   
   // Carousel Auto-Scroll Logic
   useEffect(() => {
@@ -372,6 +381,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
              ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">ไม่มีข้อมูล</div>
              )}
+
+             {/* Waiting for Data Overlay */}
+             {stats.length > 0 && !stats[index].isSubmitted && (
+                 <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4 animate-fade-in">
+                     <div className="bg-amber-100 p-4 rounded-full mb-3 shadow-sm animate-pulse">
+                         <Clock className="w-8 h-8 text-amber-600" />
+                     </div>
+                     <h4 className="text-xl font-bold text-gray-800 mb-1">รอการบันทึกข้อมูล</h4>
+                     <p className="text-sm text-gray-500">
+                         ห้อง <span className="font-bold text-brand-600">{stats[index].grade}</span> ยังไม่ได้ส่งข้อมูลวันนี้
+                     </p>
+                 </div>
+             )}
              
              {/* Navigation Buttons */}
              <button 
@@ -447,8 +469,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false }) => {
           </div>
       )}
 
+      {/* Missing Data Alert Box */}
+      {missingClasses.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 animate-slide-up shadow-sm">
+              <div className="bg-amber-100 p-2 rounded-full shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                  <h3 className="font-bold text-amber-800 text-lg flex items-center gap-2">
+                      รอการบันทึกข้อมูล
+                      <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full border border-amber-200">
+                          {missingClasses.length} ห้อง
+                      </span>
+                  </h3>
+                  <p className="text-sm text-amber-700 mt-1">
+                      ห้องเรียนต่อไปนี้ยังไม่ได้บันทึกข้อมูลการมาเรียน:
+                      <span className="font-bold ml-1">
+                          {missingClasses.map(c => c.grade).join(', ')}
+                      </span>
+                  </p>
+              </div>
+          </div>
+      )}
+
       {/* Top Stats Grid - Smart Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+         {/* Card 0: Submission Status (NEW) */}
+         <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+             <div className={`absolute right-0 top-0 w-24 h-24 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
+             <div className="relative z-10">
+                 <p className="text-gray-500 text-sm font-bold mb-1">สถานะการบันทึก</p>
+                 <div className="flex items-baseline gap-2">
+                    <h3 className={`text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
+                        {submittedClasses}<span className="text-2xl text-gray-400">/{totalClasses}</span>
+                    </h3>
+                 </div>
+                 <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+                    <div 
+                        className={`h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                        style={{ width: `${totalClasses > 0 ? (submittedClasses / totalClasses) * 100 : 0}%` }}
+                    ></div>
+                 </div>
+             </div>
+             <div className={`relative z-10 p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                 <ClipboardCheck className="w-8 h-8" />
+             </div>
+         </div>
          {/* Card 1: Total Students */}
          <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
              <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
