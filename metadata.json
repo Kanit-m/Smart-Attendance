@@ -1,0 +1,5 @@
+{
+  "name": "Smart Attendance System",
+  "description": "A modern, minimalist student attendance tracking system for schools, featuring real-time dashboards, admin management, and teacher reporting tools using Firebase.",
+  "requestFramePermissions": []
+}
