@@ -6,9 +6,11 @@ import { AdminPanel } from './components/AdminPanel';
 import { TeacherPanel } from './components/TeacherPanel';
 import { LoginModal } from './components/LoginModal';
 import { Role, AppUser } from './types';
-import { doc, getDoc } from 'firebase/firestore/lite';
+import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
+import { Student } from './types';
+import { mapStudentData } from './utils';
 
 function App() {
   const [view, setView] = useState<'dashboard' | 'admin' | 'teacher'>('dashboard');
@@ -17,6 +19,7 @@ function App() {
   const [showTeacherLogin, setShowTeacherLogin] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [students, setStudents] = useState<Student[]>([]);
 
   useEffect(() => {
     // Listen to auth state changes
@@ -31,9 +34,9 @@ function App() {
             if (userData.role === Role.ADMIN) setView('admin');
             else if (userData.role === Role.TEACHER) setView('teacher');
           } else {
-             // User exists in Auth but not in Firestore users collection (or deleted)
-             console.error("User data not found in Firestore");
-             setCurrentUser(null);
+            // User exists in Auth but not in Firestore users collection (or deleted)
+            console.error("User data not found in Firestore");
+            setCurrentUser(null);
           }
         } catch (e) {
           console.error("Error fetching user data", e);
@@ -52,16 +55,31 @@ function App() {
     // Fetch school settings
     const fetchSettings = async () => {
       try {
-         const docRef = doc(db, 'settings', 'school');
-         const docSnap = await getDoc(docRef);
-         if (docSnap.exists()) {
-           setLogoUrl(docSnap.data().logoUrl);
-         }
-      } catch(e) {
+        const docRef = doc(db, 'settings', 'school');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setLogoUrl(docSnap.data().logoUrl);
+        }
+      } catch (e) {
         console.log("Error fetching settings", e);
       }
     };
     fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    // Fetch all students once
+    const fetchStudents = async () => {
+      try {
+        const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
+        const snap = await getDocs(q);
+        const data = snap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+        setStudents(data);
+      } catch (e) {
+        console.error("Error fetching students", e);
+      }
+    };
+    fetchStudents();
   }, []);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
@@ -76,12 +94,12 @@ function App() {
     try {
       // Check if user entered a full email, if not, append the local domain
       // Note: For 'admin' -> 'admin@school.local'
-      const email = cleanUsername.includes('@') 
-        ? cleanUsername 
+      const email = cleanUsername.includes('@')
+        ? cleanUsername
         : `${cleanUsername}@school.local`;
 
       await signInWithEmailAndPassword(auth, email, cleanPass);
-      
+
       // Successful login will trigger onAuthStateChanged
       if (intendedRole === Role.ADMIN) setShowAdminLogin(false);
       if (intendedRole === Role.TEACHER) setShowTeacherLogin(false);
@@ -89,12 +107,12 @@ function App() {
     } catch (error: any) {
       console.error("Login failed", error);
       let errorMessage = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
-      
+
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') errorMessage = "ไม่พบชื่อผู้ใช้นี้ หรือรหัสผ่านผิด (หากเพิ่งสมัครและล็อกอินไม่ได้ โปรดติดต่อ Admin)";
       else if (error.code === 'auth/wrong-password') errorMessage = "รหัสผ่านไม่ถูกต้อง";
       else if (error.code === 'auth/invalid-email') errorMessage = "รูปแบบชื่อผู้ใช้ไม่ถูกต้อง";
       else if (error.code === 'auth/too-many-requests') errorMessage = "ทำรายการซ้ำเกินกำหนด กรุณารอสักครู่";
-      
+
       // Throw error to be caught by the Modal UI
       throw new Error(errorMessage);
     }
@@ -115,8 +133,8 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 font-sans">
-      <Header 
-        currentUser={currentUser} 
+      <Header
+        currentUser={currentUser}
         onLoginAdmin={() => setShowAdminLogin(true)}
         onLoginTeacher={() => setShowTeacherLogin(true)}
         onLogout={handleLogout}
@@ -124,8 +142,8 @@ function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {view === 'dashboard' && <Dashboard />}
-        
+        {view === 'dashboard' && <Dashboard students={students} />}
+
         {view === 'admin' && currentUser?.role === Role.ADMIN && (
           <div className="animate-fade-in">
             <div className="mb-6">
@@ -139,11 +157,12 @@ function App() {
         {view === 'teacher' && (
           <div className="animate-fade-in">
             <div className="mb-6 print:hidden">
-               <h2 className="text-2xl font-bold text-gray-800">ระบบครู</h2>
-               <p className="text-gray-500">บันทึกการมาเรียนและรายงานสถิติ</p>
+              <h2 className="text-2xl font-bold text-gray-800">ระบบครู</h2>
+              <p className="text-gray-500">บันทึกการมาเรียนและรายงานสถิติ</p>
             </div>
-            <TeacherPanel 
-              currentUser={currentUser!} 
+            <TeacherPanel
+              currentUser={currentUser!}
+              allStudents={students}
               onBackToAdmin={currentUser?.role === Role.ADMIN ? () => setView('admin') : undefined}
             />
           </div>
@@ -152,19 +171,19 @@ function App() {
         {/* Access Denied / Fallback */}
         {(view !== 'dashboard' && !currentUser) && (
           <div className="text-center mt-20">
-             <p className="text-red-500">กรุณาเข้าสู่ระบบ</p>
+            <p className="text-red-500">กรุณาเข้าสู่ระบบ</p>
           </div>
         )}
-        
+
         {/* Wrong Role Warning (Show only if user is NOT admin trying to access admin, and NOT teacher trying to access teacher) */}
         {(view === 'admin' && currentUser && currentUser.role !== Role.ADMIN) && (
-           <div className="text-center mt-20">
-              <p className="text-red-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้ (สำหรับผู้ดูแลระบบเท่านั้น)</p>
-           </div>
+          <div className="text-center mt-20">
+            <p className="text-red-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้ (สำหรับผู้ดูแลระบบเท่านั้น)</p>
+          </div>
         )}
       </main>
 
-      <LoginModal 
+      <LoginModal
         isOpen={showAdminLogin}
         onClose={() => setShowAdminLogin(false)}
         title="เข้าสู่ระบบผู้ดูแล"
@@ -172,7 +191,7 @@ function App() {
         onLogin={(u, p) => handleLogin(u, p, Role.ADMIN)}
       />
 
-      <LoginModal 
+      <LoginModal
         isOpen={showTeacherLogin}
         onClose={() => setShowTeacherLogin(false)}
         title="เข้าสู่ระบบครู"
@@ -181,9 +200,9 @@ function App() {
       />
 
       <footer className="bg-white border-t py-6 mt-auto no-print">
-         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-400">
-            &copy; {new Date().getFullYear()} โรงเรียนประชาสามัคคี. All rights reserved.
-         </div>
+        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-400">
+          &copy; {new Date().getFullYear()} โรงเรียนประชาสามัคคี. All rights reserved.
+        </div>
       </footer>
     </div>
   );
