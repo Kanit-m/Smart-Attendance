@@ -103,7 +103,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         if (students.length === 0) return;
 
         try {
-            const q = query(collection(db, 'attendance'), where('date', '==', selectedDate));
+            const q = query(collection(db, 'attendance'), where('date', '==', selectedDate), where('grade', '==', selectedClass));
             const snap = await getDocs(q);
             const existing = new Map(snap.docs.map(d => [d.data().studentId, d.data().status]));
             const isHoliday = holidays.find(h => h.date === selectedDate);
@@ -118,7 +118,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         } catch (error) {
             console.error("Error loading attendance:", error);
         }
-    }, [selectedDate, students, holidays]);
+    }, [selectedDate, students, holidays, selectedClass]);
 
     useEffect(() => {
         if ((currentView === 'check' || currentView === 'dashboard')) {

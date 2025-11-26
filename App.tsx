@@ -68,13 +68,41 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Fetch all students once
+    // Fetch all students once (with caching)
     const fetchStudents = async () => {
       try {
+        const CACHE_KEY = 'cached_students';
+        const TIME_KEY = 'cached_students_time';
+        const ONE_DAY = 24 * 60 * 60 * 1000; // 24 hours
+
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        const cachedTime = localStorage.getItem(TIME_KEY);
+        const now = Date.now();
+
+        if (cachedData && cachedTime) {
+          const age = now - parseInt(cachedTime);
+          if (age < ONE_DAY) {
+            console.log(`Using cached student data (${(age / 1000 / 60).toFixed(1)} mins old)`);
+            setStudents(JSON.parse(cachedData));
+            return;
+          }
+        }
+
+        console.log("Fetching fresh student data from Firestore");
         const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
         const snap = await getDocs(q);
         const data = snap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+
         setStudents(data);
+
+        // Save to cache
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          localStorage.setItem(TIME_KEY, now.toString());
+        } catch (err) {
+          console.error("Failed to save student cache", err);
+        }
+
       } catch (e) {
         console.error("Error fetching students", e);
       }
