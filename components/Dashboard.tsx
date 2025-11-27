@@ -4,12 +4,13 @@ import {
     Users, UserCheck, UserX, Sun,
     ChevronRight, ChevronLeft, LayoutGrid,
     Baby, BookOpen, Activity, CalendarDays, Sparkles, Download,
-    ClipboardCheck, AlertTriangle, Clock
+    ClipboardCheck, AlertTriangle, Clock, Printer
 } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday } from '../types';
 import { mapStudentData } from '../utils';
+import { DailyReport } from './DailyReport';
 
 interface DashboardProps {
     embedded?: boolean;
@@ -50,6 +51,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Touch State for Swipe
     const [touchStart, setTouchStart] = useState(0);
     const [touchEnd, setTouchEnd] = useState(0);
+
+    // Report Modal State
+    const [showReportModal, setShowReportModal] = useState(false);
 
     useEffect(() => {
         fetchData(currentDate);
@@ -433,6 +437,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                         <span>Export CSV</span>
                     </button>
 
+                    {/* Print Report Button */}
+                    <button
+                        onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
+                    >
+                        <Printer className="w-4 h-4" />
+                        <span>พิมพ์รายงาน</span>
+                    </button>
+
                     {/* DATE PICKER COMPONENT */}
                     <div className="relative group w-full sm:w-auto">
                         <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 hover:border-brand-400 hover:shadow-md transition-all cursor-pointer">
@@ -663,6 +676,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 </div>
 
             </div>
+
+            {/* Daily Report Modal */}
+            {showReportModal && (
+                <DailyReport
+                    students={students}
+                    attendances={attendances}
+                    date={currentDate}
+                    onClose={() => setShowReportModal(false)}
+                />
+            )}
         </div>
     );
 };

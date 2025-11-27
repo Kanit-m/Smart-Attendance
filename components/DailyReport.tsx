@@ -1,714 +1,429 @@
-
-import React, { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore/lite';
-import { db } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { X, Printer } from 'lucide-react';
 import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
-import { mapStudentData } from '../utils';
-import { Printer, ArrowLeft, Loader2, Save, Download } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface DailyReportProps {
-  date: string;
-  onBack: () => void;
+    students: Student[];
+    attendances: AttendanceRecord[];
+    date: string;
+    onClose: () => void;
 }
 
-// Data structure mimicking the user's requirements
-interface StatCounts {
-  maleTotal: number;
-  femaleTotal: number;
-  total: number;
-  attendedMale: number;
-  attendedFemale: number;
-  attendedTotal: number;
-  absentMale: number;
-  absentFemale: number;
-  absentTotal: number;
-}
+// Editable Input Component
+const DottedInput = ({ width = "w-full", value = "", center = false, transparent = false, solid = false, className = "", ...props }: { width?: string, value?: string, center?: boolean, transparent?: boolean, solid?: boolean, className?: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input
+        type="text"
+        className={`${transparent ? '' : (solid ? 'border-b border-black' : 'border-b border-dotted border-black')} outline-none bg-transparent px-[3px] font-sarabun text-black ${width} ${center ? 'text-center' : ''} ${className}`}
+        defaultValue={value}
+        {...props}
+    />
+);
 
-interface ReportData {
-  grades: Record<string, StatCounts>;
-  summaryK: StatCounts;
-  summaryP: StatCounts;
-  grandTotal: StatCounts & { percent: string };
-}
+export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances, date, onClose }) => {
+    // Helper to get stats for a specific grade or list of grades
+    const getStats = (gradePattern: string | string[]) => {
+        const targetGrades = Array.isArray(gradePattern) ? gradePattern : [gradePattern];
 
-// Mapping from DB Grade values to Report Display Labels
-const DB_TO_REPORT_GRADE: Record<string, string> = {
-  'อนุบาล 2': 'อนุบาลปีที่ 2 (4 ขวบ)',
-  'อนุบาล 3': 'อนุบาลปีที่ 3 (5 ขวบ)',
-  'ประถมศึกษาปีที่ 1': 'ประถมศึกษาปีที่ 1',
-  'ประถมศึกษาปีที่ 2': 'ประถมศึกษาปีที่ 2',
-  'ประถมศึกษาปีที่ 3': 'ประถมศึกษาปีที่ 3',
-  'ประถมศึกษาปีที่ 4': 'ประถมศึกษาปีที่ 4',
-  'ประถมศึกษาปีที่ 5': 'ประถมศึกษาปีที่ 5',
-  'ประถมศึกษาปีที่ 6': 'ประถมศึกษาปีที่ 6',
-};
-
-// Styles optimized for 10pt font and specific alignments with 1.8 line height
-const REPORT_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
-
-  .report-wrapper {
-      font-family: 'Sarabun', sans-serif;
-      background-color: #525659;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      padding: 40px 0;
-  }
-
-  .report-container {
-      font-family: 'Sarabun', sans-serif;
-      width: 210mm;
-      min-height: 297mm;
-      background-color: white;
-      padding: 15mm 20mm;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-      box-sizing: border-box;
-      position: relative;
-      color: black;
-      font-size: 10pt; /* Global font size 10pt */
-      line-height: 1.3;
-  }
-
-  .report-header {
-      text-align: center;
-      margin-bottom: 10px;
-  }
-
-  .report-header h3 {
-      margin: 2px 0;
-      font-size: 12pt; /* Header slightly larger */
-      font-weight: bold;
-      line-height: 1.8;
-  }
-
-  .report-header p {
-      margin: 2px 0;
-      font-size: 10pt;
-      line-height: 1.8;
-  }
-
-  .attendance-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 10px;
-      font-size: 10pt;
-      border-spacing: 0;
-  }
-
-  .attendance-table th,
-  .attendance-table td {
-      border: 1px solid #000000;
-      padding: 3px 2px;
-      text-align: center;
-      height: 20px;
-      vertical-align: middle;
-      line-height: 1.1;
-      font-size: 10pt;
-  }
-
-  .attendance-table th {
-      font-weight: bold;
-      background-color: #fff;
-      padding-top: 5px;
-      padding-bottom: 5px;
-  }
-
-  .summary-row {
-      background-color: #fffcf0;
-      font-weight: bold;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-  }
-
-  .grand-total-row {
-      font-weight: bold;
-      background-color: #fff;
-  }
-
-  .duty-notes {
-      margin-top: 25px;
-      font-size: 10pt;
-  }
-
-  .note-header {
-      font-weight: bold;
-      margin-bottom: 12px;
-  }
-
-  /* Relaxed line height settings (1.8) */
-  .note-content p {
-      margin: 8px 0; 
-      line-height: 1.8; 
-      font-size: 10pt;
-  }
-
-  .note-time-row {
-      display: flex;
-      align-items: baseline;
-      margin: 8px 0;
-      font-size: 10pt;
-      line-height: 1.8;
-  }
-
-  /* Form Input Table Styles */
-  .form-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 12px;
-      margin-top: 6px;
-      font-size: 10pt;
-  }
-  
-  .form-table td {
-      padding: 6px 0;
-      vertical-align: bottom;
-      font-size: 10pt;
-      line-height: 1.8;
-  }
-  
-  .input-col {
-      width: 99%; /* Take remaining space */
-      border-bottom: 1px dotted #000;
-      position: relative;
-  }
-
-  .dotted-input {
-      border: none;
-      background: transparent;
-      font-family: 'Sarabun', sans-serif;
-      font-size: 10pt !important;
-      width: 100%;
-      outline: none;
-      color: #000;
-      padding: 0 5px;
-      line-height: 1.8;
-      height: 28px; /* Increased height to prevent overlap with 1.8 line height */
-      margin-bottom: -3px;
-  }
-  
-  .dotted-input:focus {
-      background-color: #f0f9ff;
-  }
-
-  .signature-area {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      margin-top: 25px;
-      padding-right: 20px;
-      font-size: 10pt;
-  }
-
-  .signature-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      align-items: flex-start;
-  }
-
-  .signature-block {
-      display: flex;
-      justify-content: center;
-      width: 100%;
-  }
-
-  .signature-grid {
-      display: grid;
-      grid-template-columns: max-content minmax(160px, max-content) max-content;
-      align-items: baseline;
-      column-gap: 10px;
-      row-gap: 5px;
-  }
-
-  /* Print Styles */
-  @media print {
-      body {
-          background-color: white;
-      }
-      
-      .no-print {
-          display: none !important;
-      }
-
-      .report-wrapper {
-          padding: 0;
-          background-color: white;
-          display: block;
-      }
-
-      .report-container {
-          width: 100%;
-          min-height: auto;
-          box-shadow: none;
-          padding: 0;
-          margin: 0;
-          border: none;
-      }
-
-      @page {
-          size: A4;
-          margin: 10mm 15mm 10mm 15mm;
-      }
-      
-      /* Updated Print Table Styles */
-      .report-table th,
-      .report-table td {
-          border: 1px solid #000 !important;
-          vertical-align: middle !important;
-          padding: 4px 1px !important;
-          font-size: 8pt !important;
-          line-height: 1.1 !important;
-      }
-
-      /* Adjust specific column widths for print */
-      .report-table th:nth-child(1),
-      .report-table td:nth-child(1) {
-          width: 30% !important; /* Grade column (was 2nd, now 1st) */
-      }
-      
-      .report-table th:last-child,
-      .report-table td:last-child {
-          width: 10% !important; /* Remarks column */
-      }
-      
-      .input-col {
-          border-bottom: 1px dotted #000 !important;
-      }
-  }
-`;
-
-const INITIAL_STATS: StatCounts = {
-    maleTotal: 0, femaleTotal: 0, total: 0,
-    attendedMale: 0, attendedFemale: 0, attendedTotal: 0,
-    absentMale: 0, absentFemale: 0, absentTotal: 0
-};
-
-export const DailyReport: React.FC<DailyReportProps> = ({ date, onBack }) => {
-  const [loading, setLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  
-  // Note Inputs State
-  const [notes, setNotes] = useState({
-      morning1: '',
-      morning2: '',
-      afternoon: '',
-      other: '',
-      teacherName: ''
-  });
-
-  useEffect(() => {
-    fetchData();
-  }, [date]);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-        const studentsSnap = await getDocs(collection(db, 'students'));
-        const students = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
-
-        const q = query(collection(db, 'attendance'), where('date', '==', date));
-        const attSnap = await getDocs(q);
-        const attendanceRecords = attSnap.docs.map(doc => doc.data() as AttendanceRecord);
-
-        const data: ReportData = {
-            grades: {},
-            summaryK: { ...INITIAL_STATS },
-            summaryP: { ...INITIAL_STATS },
-            grandTotal: { ...INITIAL_STATS, percent: '0.00' }
-        };
-
-        Object.values(DB_TO_REPORT_GRADE).forEach(reportLabel => {
-            data.grades[reportLabel] = { ...INITIAL_STATS };
-        });
-
-        students.forEach(s => {
-            const reportGrade = DB_TO_REPORT_GRADE[s.grade];
-            if (reportGrade && data.grades[reportGrade]) {
-                const target = data.grades[reportGrade];
-                if (s.gender === Gender.MALE) target.maleTotal++;
-                else target.femaleTotal++;
-                target.total++;
+        // Filter students belonging to these grades
+        const gradeStudents = students.filter(s => {
+            if (Array.isArray(gradePattern)) {
+                return gradePattern.includes(s.grade);
             }
+            return s.grade === gradePattern;
         });
 
-        attendanceRecords.forEach(att => {
-            const reportGrade = DB_TO_REPORT_GRADE[att.grade];
-            if (reportGrade && data.grades[reportGrade]) {
-                const target = data.grades[reportGrade];
-                const isPresent = att.status === AttendanceStatus.PRESENT || att.status === AttendanceStatus.LATE;
-                const isAbsent = [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(att.status);
+        const totalMale = gradeStudents.filter(s => s.gender === Gender.MALE).length;
+        const totalFemale = gradeStudents.filter(s => s.gender === Gender.FEMALE).length;
+        const total = totalMale + totalFemale;
 
-                if (isPresent) {
-                    if (att.gender === Gender.MALE) target.attendedMale++;
-                    else target.attendedFemale++;
-                    target.attendedTotal++;
-                } else if (isAbsent) {
-                    if (att.gender === Gender.MALE) target.absentMale++;
-                    else target.absentFemale++;
-                    target.absentTotal++;
-                }
+        // Filter attendance for these students
+        const gradeAttendance = attendances.filter(a => {
+            // Check if the attendance record belongs to a student in the target grades
+            // Note: AttendanceRecord has 'grade' field, we can use that directly
+            if (Array.isArray(gradePattern)) {
+                return gradePattern.includes(a.grade);
             }
+            return a.grade === gradePattern;
         });
 
-        const sum = (source: StatCounts, target: StatCounts) => {
-            target.maleTotal += source.maleTotal;
-            target.femaleTotal += source.femaleTotal;
-            target.total += source.total;
-            target.attendedMale += source.attendedMale;
-            target.attendedFemale += source.attendedFemale;
-            target.attendedTotal += source.attendedTotal;
-            target.absentMale += source.absentMale;
-            target.absentFemale += source.absentFemale;
-            target.absentTotal += source.absentTotal;
+        // Count Absences (Absent, Sick, Personal)
+        const absentRecs = gradeAttendance.filter(a =>
+            [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status)
+        );
+
+        const absentMale = absentRecs.filter(a => a.gender === Gender.MALE).length;
+        const absentFemale = absentRecs.filter(a => a.gender === Gender.FEMALE).length;
+        const absentTotal = absentMale + absentFemale;
+
+        // Present = Total - Absent
+        const presentMale = totalMale - absentMale;
+        const presentFemale = totalFemale - absentFemale;
+        const presentTotal = total - absentTotal;
+
+        return {
+            totalMale, totalFemale, total,
+            presentMale, presentFemale, presentTotal,
+            absentMale, absentFemale, absentTotal
         };
+    };
 
-        ['อนุบาล 2', 'อนุบาล 3'].forEach(dbGrade => {
-            const label = DB_TO_REPORT_GRADE[dbGrade];
-            if (data.grades[label]) sum(data.grades[label], data.summaryK);
-        });
+    // Define Grade Groups
+    const k2Stats = getStats('อนุบาล 2');
+    const k3Stats = getStats('อนุบาล 3');
+    const kTotalStats = {
+        totalMale: k2Stats.totalMale + k3Stats.totalMale,
+        totalFemale: k2Stats.totalFemale + k3Stats.totalFemale,
+        total: k2Stats.total + k3Stats.total,
+        presentMale: k2Stats.presentMale + k3Stats.presentMale,
+        presentFemale: k2Stats.presentFemale + k3Stats.presentFemale,
+        presentTotal: k2Stats.presentTotal + k3Stats.presentTotal,
+        absentMale: k2Stats.absentMale + k3Stats.absentMale,
+        absentFemale: k2Stats.absentFemale + k3Stats.absentFemale,
+        absentTotal: k2Stats.absentTotal + k3Stats.absentTotal,
+    };
 
-        ['ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 
-         'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'].forEach(dbGrade => {
-            const label = DB_TO_REPORT_GRADE[dbGrade];
-            if (data.grades[label]) sum(data.grades[label], data.summaryP);
-        });
+    const p1Stats = getStats('ประถมศึกษาปีที่ 1');
+    const p2Stats = getStats('ประถมศึกษาปีที่ 2');
+    const p3Stats = getStats('ประถมศึกษาปีที่ 3');
+    const p4Stats = getStats('ประถมศึกษาปีที่ 4');
+    const p5Stats = getStats('ประถมศึกษาปีที่ 5');
+    const p6Stats = getStats('ประถมศึกษาปีที่ 6');
 
-        sum(data.summaryK, data.grandTotal);
-        sum(data.summaryP, data.grandTotal);
+    const pTotalStats = {
+        totalMale: p1Stats.totalMale + p2Stats.totalMale + p3Stats.totalMale + p4Stats.totalMale + p5Stats.totalMale + p6Stats.totalMale,
+        totalFemale: p1Stats.totalFemale + p2Stats.totalFemale + p3Stats.totalFemale + p4Stats.totalFemale + p5Stats.totalFemale + p6Stats.totalFemale,
+        total: p1Stats.total + p2Stats.total + p3Stats.total + p4Stats.total + p5Stats.total + p6Stats.total,
+        presentMale: p1Stats.presentMale + p2Stats.presentMale + p3Stats.presentMale + p4Stats.presentMale + p5Stats.presentMale + p6Stats.presentMale,
+        presentFemale: p1Stats.presentFemale + p2Stats.presentFemale + p3Stats.presentFemale + p4Stats.presentFemale + p5Stats.presentFemale + p6Stats.presentFemale,
+        presentTotal: p1Stats.presentTotal + p2Stats.presentTotal + p3Stats.presentTotal + p4Stats.presentTotal + p5Stats.presentTotal + p6Stats.presentTotal,
+        absentMale: p1Stats.absentMale + p2Stats.absentMale + p3Stats.absentMale + p4Stats.absentMale + p5Stats.absentMale + p6Stats.absentMale,
+        absentFemale: p1Stats.absentFemale + p2Stats.absentFemale + p3Stats.absentFemale + p4Stats.absentFemale + p5Stats.absentFemale + p6Stats.absentFemale,
+        absentTotal: p1Stats.absentTotal + p2Stats.absentTotal + p3Stats.absentTotal + p4Stats.absentTotal + p5Stats.absentTotal + p6Stats.absentTotal,
+    };
 
-        if (data.grandTotal.total > 0) {
-            data.grandTotal.percent = ((data.grandTotal.attendedTotal / data.grandTotal.total) * 100).toFixed(2);
-        }
+    const grandTotal = {
+        totalMale: kTotalStats.totalMale + pTotalStats.totalMale,
+        totalFemale: kTotalStats.totalFemale + pTotalStats.totalFemale,
+        total: kTotalStats.total + pTotalStats.total,
+        presentMale: kTotalStats.presentMale + pTotalStats.presentMale,
+        presentFemale: kTotalStats.presentFemale + pTotalStats.presentFemale,
+        presentTotal: kTotalStats.presentTotal + pTotalStats.presentTotal,
+        absentMale: kTotalStats.absentMale + pTotalStats.absentMale,
+        absentFemale: kTotalStats.absentFemale + pTotalStats.absentFemale,
+        absentTotal: kTotalStats.absentTotal + pTotalStats.absentTotal,
+    };
 
-        setReportData(data);
+    const percentPresent = grandTotal.total > 0
+        ? ((grandTotal.presentTotal / grandTotal.total) * 100).toFixed(2)
+        : "0.00";
 
-    } catch (error) {
-        console.error("Error generating report", error);
-    } finally {
-        setLoading(false);
-    }
-  };
+    // Date Formatting
+    const dateObj = new Date(date);
+    const thaiMonths = [
+        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+    ];
+    const day = dateObj.getDate();
+    const month = thaiMonths[dateObj.getMonth()];
+    const year = dateObj.getFullYear() + 543;
+    const dateString = dateObj.toLocaleDateString('th-TH', { weekday: 'long' });
 
-  const handleExportPDF = async () => {
-    const input = document.getElementById('report-content');
-    if (!input) return;
+    return (
+        <div className="fixed inset-0 z-50 bg-gray-900/50 flex justify-center overflow-y-auto print:contents">
+            <div className="bg-white w-[210mm] min-h-[297mm] p-[5mm] shadow-2xl my-8 print:shadow-none print:m-0 print:w-full relative daily-report-container">
 
-    setIsExporting(true);
-    await new Promise(resolve => setTimeout(resolve, 100));
+                {/* Close / Print Buttons (Hidden in Print) */}
+                <div className="absolute top-4 right-4 flex gap-2 print:hidden">
+                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm">
+                        <Printer className="w-4 h-4" /> พิมพ์
+                    </button>
+                    <button onClick={onClose} className="bg-gray-200 text-gray-700 p-2 rounded-lg hover:bg-gray-300">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
 
-    try {
-        const canvas = await html2canvas(input, {
-            scale: 3,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            windowWidth: input.scrollWidth,
-            windowHeight: input.scrollHeight
-        });
-        
-        const imgData = canvas.toDataURL('image/png', 1.0);
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const imgProps = pdf.getImageProperties(imgData);
-        const ratio = imgProps.width / imgProps.height;
-        const width = pdfWidth;
-        const height = width / ratio;
-        
-        pdf.addImage(imgData, 'PNG', 0, 0, width, height);
-        pdf.save(`daily-report-${date}.pdf`);
-    } catch (error) {
-        console.error("Export failed", error);
-        alert("ไม่สามารถสร้างไฟล์ PDF ได้");
-    } finally {
-        setIsExporting(false);
-    }
-  };
+                {/* CONTENT START */}
+                <div className="font-sarabun text-black leading-[1] text-[15pt]">
 
-  if (loading || !reportData) {
-      return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 gap-4">
-              <Loader2 className="w-10 h-10 animate-spin text-brand-600"/>
-              <p className="text-gray-500 font-medium">กำลังประมวลผลข้อมูลรายงาน...</p>
-          </div>
-      );
-  }
-
-  const dateObj = new Date(date);
-  const thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-  const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-  
-  const dayStr = thaiDays[dateObj.getDay()];
-  const dateStr = dateObj.getDate();
-  const monthStr = thaiMonths[dateObj.getMonth()];
-  const yearStr = dateObj.getFullYear() + 543;
-
-  return (
-    <div className="report-wrapper">
-        <style>{REPORT_STYLES}</style>
-
-        {/* Toolbar */}
-        <div className="fixed top-0 left-0 right-0 p-4 bg-white/90 backdrop-blur shadow-md flex justify-between items-center z-50 no-print">
-            <div className="flex items-center gap-4">
-                <button onClick={onBack} className="flex items-center gap-2 text-gray-600 hover:text-black font-bold transition-colors">
-                    <ArrowLeft className="w-5 h-5"/> ย้อนกลับ
-                </button>
-                <div className="h-6 w-px bg-gray-300"></div>
-                <span className="font-bold text-gray-800">รายงานประจำวัน ({date})</span>
-            </div>
-            <div className="flex gap-3">
-                <button 
-                    onClick={handleExportPDF} 
-                    disabled={isExporting}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-6 py-2 rounded-full font-bold shadow-sm transition-all"
-                >
-                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
-                    บันทึก PDF
-                </button>
-                <button onClick={() => window.print()} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-6 py-2 rounded-full font-bold shadow-sm transition-all">
-                    <Printer className="w-4 h-4"/> พิมพ์รายงาน
-                </button>
-            </div>
-        </div>
-
-        {/* Paper Container */}
-        <div id="report-content" className="report-container">
-            <header className="report-header leading-relaxed">
-                <h3>สถิตินักเรียนและการปฏิบัติหน้าที่ของครูเวรประจำวัน</h3>
-                <p>โรงเรียนประชาสามัคคี สำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 1</p>
-                <p>ประจำวัน {dayStr} ที่ {dateStr} เดือน {monthStr} พ.ศ. {yearStr}</p>
-            </header>
-
-            <table className="attendance-table report-table">
-                <thead>
-                    <tr>
-                        <th rowSpan={2} style={{ width: '30%' }}>ชั้น</th>
-                        <th colSpan={3}>จำนวนเต็ม</th>
-                        <th colSpan={3}>มาเรียน</th>
-                        <th colSpan={3}>ขาดเรียน</th>
-                        <th rowSpan={2} style={{ width: '15%' }}>หมายเหตุ</th>
-                    </tr>
-                    <tr>
-                        <th>ชาย</th>
-                        <th>หญิง</th>
-                        <th>รวม</th>
-                        <th>ชาย</th>
-                        <th>หญิง</th>
-                        <th>รวม</th>
-                        <th>ชาย</th>
-                        <th>หญิง</th>
-                        <th>รวม</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {/* อนุบาล */}
-                    {['อนุบาล 2', 'อนุบาล 3'].map((gradeKey, index) => {
-                        const label = DB_TO_REPORT_GRADE[gradeKey];
-                        const d = reportData.grades[label];
-                        return (
-                            <tr key={label}>
-                                <td style={{ textAlign: 'left', paddingLeft: '10px' }}>{label}</td>
-                                <td>{d.maleTotal || ''}</td>
-                                <td>{d.femaleTotal || ''}</td>
-                                <td>{d.total || ''}</td>
-                                <td>{d.attendedMale || ''}</td>
-                                <td>{d.attendedFemale || ''}</td>
-                                <td>{d.attendedTotal || ''}</td>
-                                <td>{d.absentMale || ''}</td>
-                                <td>{d.absentFemale || ''}</td>
-                                <td>{d.absentTotal || ''}</td>
-                                <td></td>
-                            </tr>
-                        );
-                    })}
-
-                    <tr className="summary-row">
-                        <td>รวมอนุบาล</td>
-                        <td>{reportData.summaryK.maleTotal}</td>
-                        <td>{reportData.summaryK.femaleTotal}</td>
-                        <td>{reportData.summaryK.total}</td>
-                        <td>{reportData.summaryK.attendedMale || ''}</td>
-                        <td>{reportData.summaryK.attendedFemale || ''}</td>
-                        <td>{reportData.summaryK.attendedTotal || ''}</td>
-                        <td>{reportData.summaryK.absentMale || ''}</td>
-                        <td>{reportData.summaryK.absentFemale || ''}</td>
-                        <td>{reportData.summaryK.absentTotal || ''}</td>
-                        <td></td>
-                    </tr>
-
-                    {/* ประถม */}
-                    {['ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'].map((gradeKey, index) => {
-                        const label = DB_TO_REPORT_GRADE[gradeKey];
-                        const d = reportData.grades[label];
-                        return (
-                            <tr key={label}>
-                                <td style={{ textAlign: 'left', paddingLeft: '10px' }}>{label}</td>
-                                <td>{d.maleTotal || ''}</td>
-                                <td>{d.femaleTotal || ''}</td>
-                                <td>{d.total || ''}</td>
-                                <td>{d.attendedMale || ''}</td>
-                                <td>{d.attendedFemale || ''}</td>
-                                <td>{d.attendedTotal || ''}</td>
-                                <td>{d.absentMale || ''}</td>
-                                <td>{d.absentFemale || ''}</td>
-                                <td>{d.absentTotal || ''}</td>
-                                <td></td>
-                            </tr>
-                        );
-                    })}
-
-                    <tr className="summary-row">
-                        <td>รวมประถมศึกษา</td>
-                        <td>{reportData.summaryP.maleTotal}</td>
-                        <td>{reportData.summaryP.femaleTotal}</td>
-                        <td>{reportData.summaryP.total}</td>
-                        <td>{reportData.summaryP.attendedMale || ''}</td>
-                        <td>{reportData.summaryP.attendedFemale || ''}</td>
-                        <td>{reportData.summaryP.attendedTotal || ''}</td>
-                        <td>{reportData.summaryP.absentMale || ''}</td>
-                        <td>{reportData.summaryP.absentFemale || ''}</td>
-                        <td>{reportData.summaryP.absentTotal || ''}</td>
-                        <td></td>
-                    </tr>
-
-                    <tr className="grand-total-row">
-                        <td>รวมนักเรียนทั้งสิ้น</td>
-                        <td>{reportData.grandTotal.maleTotal}</td>
-                        <td>{reportData.grandTotal.femaleTotal}</td>
-                        <td>{reportData.grandTotal.total}</td>
-                        <td>{reportData.grandTotal.attendedMale || ''}</td>
-                        <td>{reportData.grandTotal.attendedFemale || ''}</td>
-                        <td>{reportData.grandTotal.attendedTotal || ''}</td>
-                        <td>{reportData.grandTotal.absentMale || ''}</td>
-                        <td>{reportData.grandTotal.absentFemale || ''}</td>
-                        <td>{reportData.grandTotal.absentTotal || ''}</td>
-                        <td style={{ textAlign: 'left', paddingLeft: '5px' }}>ร้อยละ {reportData.grandTotal.percent}</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div className="duty-notes leading-relaxed">
-                <p className="note-header">● บันทึกครูเวรประจำวัน</p>
-                <div className="note-content leading-relaxed">
-                    <p>เวลา 07.30 น. ควบคุม แนะนำการทำความสะอาดอาคารเรียน บริเวณโรงเรียนและอื่น</p>
-                    <p>เวลา 08.00 น. ให้สัญญาณเข้าแถว ควบคุมการเข้าแถว เคารพธงชาติ ทำกิจกรรมประจำวัน</p>
-                    
-                    {/* Notes Section 1: 1 and 2 Alignment */}
-                    <table className="form-table">
-                        <tbody>
-                            <tr>
-                                <td style={{ width: '1%', whiteSpace: 'nowrap' }}>อบรมนักเรียนหน้าเสาธง เรื่อง</td>
-                                <td style={{ width: '1%', whiteSpace: 'nowrap', padding: '0 5px' }}>1</td>
-                                <td className="input-col">
-                                    <input 
-                                        type="text" 
-                                        className="dotted-input"
-                                        value={notes.morning1}
-                                        onChange={(e) => setNotes({...notes, morning1: e.target.value})}
-                                    />
-                                </td>
-                            </tr>
-                            <tr>
-                                <td></td>
-                                <td style={{ width: '1%', whiteSpace: 'nowrap', padding: '0 5px' }}>2</td>
-                                <td className="input-col">
-                                    <input 
-                                        type="text" 
-                                        className="dotted-input"
-                                        value={notes.morning2}
-                                        onChange={(e) => setNotes({...notes, morning2: e.target.value})}
-                                    />
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <p>เวลา 08.30 น. เข้าห้องเรียน</p>
-                    <p>เวลา 11.30 น. พักกลางวัน / ทำกิจกรรม</p>
-                    
-                    {/* Afternoon Time Alignment */}
-                    <div className="note-time-row">
-                         <div style={{ width: '26mm', flexShrink: 0 }}>เวลา 12.15 น. </div>
-                         <div>ให้สัญญาณตีระฆังเข้าเรียนช่วงบ่ายและอบรมเพิ่มเติม</div>
+                    {/* Header */}
+                    <div className="text-center mb-0 leading-[1]">
+                        <h1 className="text-[15pt]">สถิตินักเรียนและการปฏิบัติหน้าที่ของครูเวรประจำวัน</h1>
+                        <h2 className="text-[15pt] mb-0">โรงเรียนประชาสามัคคี สำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 1</h2>
+                        <div className="text-[15pt]">
+                            ประจำวัน {dateString} ที่ {day} เดือน {month} พ.ศ. {year}
+                        </div>
                     </div>
 
-                    <table className="form-table">
-                        <tbody>
+                    {/* Table */}
+                    <table className="w-full border-collapse border border-black mb-0 text-center text-[15pt]">
+                        <thead>
+                            <tr className="bg-white">
+                                <th className="border border-black py-2 w-10" rowSpan={2}>ที่</th>
+                                <th className="border border-black py-2 w-40" rowSpan={2}>ชั้น</th>
+                                <th className="border border-black py-1" colSpan={3}>จำนวนเต็ม</th>
+                                <th className="border border-black py-1" colSpan={3}>มาเรียน</th>
+                                <th className="border border-black py-1" colSpan={3}>ขาดเรียน</th>
+                                <th className="border border-black py-2" rowSpan={2}>หมายเหตุ</th>
+                            </tr>
                             <tr>
-                                <td style={{ width: '26mm' }}></td>
-                                <td style={{ width: '1%', whiteSpace: 'nowrap', paddingRight: '5px' }}>เรื่อง</td>
-                                <td className="input-col">
-                                    <input 
-                                        type="text" 
-                                        className="dotted-input"
-                                        value={notes.afternoon}
-                                        onChange={(e) => setNotes({...notes, afternoon: e.target.value})}
-                                    />
-                                </td>
+                                <th className="border border-black py-1 w-12">ชาย</th>
+                                <th className="border border-black py-1 w-12">หญิง</th>
+                                <th className="border border-black py-1 w-12">รวม</th>
+                                <th className="border border-black py-1 w-12">ชาย</th>
+                                <th className="border border-black py-1 w-12">หญิง</th>
+                                <th className="border border-black py-1 w-12">รวม</th>
+                                <th className="border border-black py-1 w-12">ชาย</th>
+                                <th className="border border-black py-1 w-12">หญิง</th>
+                                <th className="border border-black py-1 w-12">รวม</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {/* Kindergarten */}
+                            <tr>
+                                <td className="border border-black py-1">1</td>
+                                <td className="border border-black py-1 text-left px-2 whitespace-nowrap">อนุบาลปีที่ 2 (4 ขวบ)</td>
+                                <td className="border border-black py-1">{k2Stats.totalMale}</td>
+                                <td className="border border-black py-1">{k2Stats.totalFemale}</td>
+                                <td className="border border-black py-1">{k2Stats.total}</td>
+                                <td className="border border-black py-1">{k2Stats.presentMale}</td>
+                                <td className="border border-black py-1">{k2Stats.presentFemale}</td>
+                                <td className="border border-black py-1">{k2Stats.presentTotal}</td>
+                                <td className="border border-black py-1">{k2Stats.absentMale}</td>
+                                <td className="border border-black py-1">{k2Stats.absentFemale}</td>
+                                <td className="border border-black py-1">{k2Stats.absentTotal}</td>
+                                <td className="border border-black py-1"><DottedInput transparent /></td>
+                            </tr>
+                            <tr>
+                                <td className="border border-black py-1">2</td>
+                                <td className="border border-black py-1 text-left px-2 whitespace-nowrap">อนุบาลปีที่ 3 (5 ขวบ)</td>
+                                <td className="border border-black py-1">{k3Stats.totalMale}</td>
+                                <td className="border border-black py-1">{k3Stats.totalFemale}</td>
+                                <td className="border border-black py-1">{k3Stats.total}</td>
+                                <td className="border border-black py-1">{k3Stats.presentMale}</td>
+                                <td className="border border-black py-1">{k3Stats.presentFemale}</td>
+                                <td className="border border-black py-1">{k3Stats.presentTotal}</td>
+                                <td className="border border-black py-1">{k3Stats.absentMale}</td>
+                                <td className="border border-black py-1">{k3Stats.absentFemale}</td>
+                                <td className="border border-black py-1">{k3Stats.absentTotal}</td>
+                                <td className="border border-black py-1"><DottedInput transparent /></td>
+                            </tr>
+                            <tr className="bg-orange-50 print:bg-gray-100">
+                                <td className="border border-black py-1" colSpan={2}>รวมอนุบาล</td>
+                                <td className="border border-black py-1">{kTotalStats.totalMale}</td>
+                                <td className="border border-black py-1">{kTotalStats.totalFemale}</td>
+                                <td className="border border-black py-1">{kTotalStats.total}</td>
+                                <td className="border border-black py-1">{kTotalStats.presentMale}</td>
+                                <td className="border border-black py-1">{kTotalStats.presentFemale}</td>
+                                <td className="border border-black py-1">{kTotalStats.presentTotal}</td>
+                                <td className="border border-black py-1">{kTotalStats.absentMale}</td>
+                                <td className="border border-black py-1">{kTotalStats.absentFemale}</td>
+                                <td className="border border-black py-1">{kTotalStats.absentTotal}</td>
+                                <td className="border border-black py-1"></td>
+                            </tr>
+
+                            {/* Primary */}
+                            {[p1Stats, p2Stats, p3Stats, p4Stats, p5Stats, p6Stats].map((stat, idx) => (
+                                <tr key={idx}>
+                                    <td className="border border-black py-1">{idx + 3}</td>
+                                    <td className="border border-black py-1 text-left px-2 whitespace-nowrap">ประถมศึกษาปีที่ {idx + 1}</td>
+                                    <td className="border border-black py-1">{stat.totalMale}</td>
+                                    <td className="border border-black py-1">{stat.totalFemale}</td>
+                                    <td className="border border-black py-1">{stat.total}</td>
+                                    <td className="border border-black py-1">{stat.presentMale}</td>
+                                    <td className="border border-black py-1">{stat.presentFemale}</td>
+                                    <td className="border border-black py-1">{stat.presentTotal}</td>
+                                    <td className="border border-black py-1">{stat.absentMale}</td>
+                                    <td className="border border-black py-1">{stat.absentFemale}</td>
+                                    <td className="border border-black py-1">{stat.absentTotal}</td>
+                                    <td className="border border-black py-1"><DottedInput transparent /></td>
+                                </tr>
+                            ))}
+
+                            <tr className="bg-orange-50 print:bg-gray-100">
+                                <td className="border border-black py-1" colSpan={2}>รวมประถมศึกษา</td>
+                                <td className="border border-black py-1">{pTotalStats.totalMale}</td>
+                                <td className="border border-black py-1">{pTotalStats.totalFemale}</td>
+                                <td className="border border-black py-1">{pTotalStats.total}</td>
+                                <td className="border border-black py-1">{pTotalStats.presentMale}</td>
+                                <td className="border border-black py-1">{pTotalStats.presentFemale}</td>
+                                <td className="border border-black py-1">{pTotalStats.presentTotal}</td>
+                                <td className="border border-black py-1">{pTotalStats.absentMale}</td>
+                                <td className="border border-black py-1">{pTotalStats.absentFemale}</td>
+                                <td className="border border-black py-1">{pTotalStats.absentTotal}</td>
+                                <td className="border border-black py-1"></td>
+                            </tr>
+
+                            {/* Grand Total */}
+                            <tr className="border-t-2 border-black">
+                                <td className="border border-black py-1" colSpan={2}>รวมนักเรียนทั้งสิ้น</td>
+                                <td className="border border-black py-1 underline decoration-double">{grandTotal.totalMale}</td>
+                                <td className="border border-black py-1 underline decoration-double">{grandTotal.totalFemale}</td>
+                                <td className="border border-black py-1 underline decoration-double">{grandTotal.total}</td>
+                                <td className="border border-black py-1">{grandTotal.presentMale}</td>
+                                <td className="border border-black py-1">{grandTotal.presentFemale}</td>
+                                <td className="border border-black py-1">{grandTotal.presentTotal}</td>
+                                <td className="border border-black py-1">{grandTotal.absentMale}</td>
+                                <td className="border border-black py-1">{grandTotal.absentFemale}</td>
+                                <td className="border border-black py-1">{grandTotal.absentTotal}</td>
+                                <td className="border border-black py-1 text-center px-1">ร้อยละ {percentPresent}</td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <p>เวลา 15.20 น. ให้สัญญาณตีระฆังกลับบ้าน / ควบคุมการเดินแถวกลับบ้าน</p>
+                    {/* Duty Log Section */}
+                    <div className="mt-0">
+                        <h3 className="text-[15pt] mb-0">• บันทึกครูเวรประจำวัน</h3>
 
-                    <table className="form-table">
-                        <tbody>
-                            <tr>
-                                <td style={{ width: '1%', whiteSpace: 'nowrap', paddingRight: '5px' }}>เรื่องอื่น ๆ (ถ้ามี)</td>
-                                <td className="input-col">
-                                    <input 
-                                        type="text" 
-                                        className="dotted-input"
-                                        value={notes.other}
-                                        onChange={(e) => setNotes({...notes, other: e.target.value})}
-                                    />
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div className="signature-area">
-                <div className="signature-wrapper">
-                    <div className="signature-block">
-                        <div className="signature-grid">
-                            <div style={{ textAlign: 'right' }}>ลงชื่อ</div>
-                            <div className="border-b border-dotted border-black w-full relative">
-                                <input 
-                                    type="text" 
-                                    className="w-full text-center bg-transparent outline-none border-none font-sarabun text-current p-0 h-auto leading-normal"
-                                    style={{ fontSize: 'inherit' }}
-                                    placeholder=""
-                                    value={notes.teacherName}
-                                    onChange={(e) => setNotes({...notes, teacherName: e.target.value})}
-                                />
+                        <div className="space-y-1 pl-4">
+                            <div className="flex items-start gap-1">
+                                <span className="whitespace-nowrap w-24">เวลา 07.30 น.</span>
+                                <div className="flex-1">
+                                    <span>ควบคุม แนะนำการทำความสะอาดอาคารเรียน บริเวณโรงเรียนและอื่น</span>
+                                </div>
                             </div>
-                            <div style={{ textAlign: 'left' }}>ครูเวรประจำวัน</div>
 
-                            <div></div>
-                            <div style={{ textAlign: 'center' }}>( {notes.teacherName || '...................................................'} )</div>
-                            <div></div>
-                        </div>
-                    </div>
-                    <div className="signature-block">
-                        <div className="signature-grid">
-                            <div style={{ textAlign: 'right' }}>ลงชื่อ</div>
-                            <div style={{ textAlign: 'center' }}>..................................................</div>
-                            <div style={{ textAlign: 'left' }}>ผู้อำนวยการ</div>
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-start gap-1">
+                                    <span className="whitespace-nowrap w-24">เวลา 08.00 น.</span>
+                                    <div className="flex-1">
+                                        <span>ให้สัญญาณเข้าแถว ควบคุมการเข้าแถว เคารพธงชาติ ทำกิจกรรมประจำวัน</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-1">
+                                    <span className="whitespace-nowrap w-auto">อบรมนักเรียนหน้าเสาธง</span>
+                                    <div className="flex-1 flex flex-col gap-1">
+                                        <div className="flex items-end gap-1">
+                                            <span className="w-16 text-right whitespace-nowrap">เรื่อง 1</span>
+                                            <DottedInput solid />
+                                        </div>
+                                        <div className="flex items-end gap-1">
+                                            <span className="w-16 text-right">2</span>
+                                            <DottedInput solid />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                            <div></div>
-                            <div style={{ textAlign: 'center' }}>(นางสาวจินดา พลีรักษ์)</div>
-                            <div></div>
+                            <div className="flex items-start gap-1">
+                                <span className="whitespace-nowrap w-24">เวลา 08.30 น.</span>
+                                <div className="flex-1">
+                                    <span>เข้าห้องเรียน</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-1">
+                                <span className="whitespace-nowrap w-24">เวลา 11.30 น.</span>
+                                <div className="flex-1">
+                                    <span>พักกลางวัน / ทำกิจกรรม</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-1">
+                                <span className="whitespace-nowrap w-24">เวลา 12.15 น.</span>
+                                <div className="flex-1">
+                                    <span>ให้สัญญาณตีระฆังเข้าเรียนช่วงบ่ายและอบรมเพิ่มเติม</span>
+                                    <div className="flex items-end gap-1 mt-1">
+                                        <span>เรื่อง</span>
+                                        <DottedInput solid />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-start gap-1">
+                                    <span className="whitespace-nowrap w-24">เวลา 15.20 น.</span>
+                                    <div className="flex-1">
+                                        <span>ให้สัญญาณตีระฆังกลับบ้าน / ควบคุมการเดินแถวกลับบ้าน</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-end gap-1">
+                                    <span className="whitespace-nowrap w-24">เรื่องอื่น ๆ (ถ้ามี)</span>
+                                    <DottedInput solid />
+                                </div>
+                            </div>
                         </div>
+
+                        {/* Signatures */}
+                        <div className="mt-4 flex justify-end px-16">
+                            <div className="flex flex-col gap-2 w-[360px]">
+                                <div className="flex items-end gap-2">
+                                    <span className="w-[35px] text-right whitespace-nowrap">ลงชื่อ</span>
+                                    <DottedInput center width="w-48" />
+                                    <span className="whitespace-nowrap">ครูเวรประจำวัน</span>
+                                </div>
+                                <div className="flex items-end gap-2">
+                                    <span className="w-[35px]"></span>
+                                    <div className="w-48 flex items-center justify-between">
+                                        <span>(</span>
+                                        <DottedInput center width="w-full" transparent />
+                                        <span>)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-1 flex justify-end px-16">
+                            <div className="flex flex-col gap-2 w-[360px]">
+                                <div className="flex items-end gap-2">
+                                    <span className="w-[35px] text-right whitespace-nowrap">ลงชื่อ</span>
+                                    <DottedInput center width="w-48" />
+                                    <span className="whitespace-nowrap">ผู้อำนวยการ</span>
+                                </div>
+                                <div className="flex items-end gap-2">
+                                    <span className="w-[35px]"></span>
+                                    <div className="w-48 text-center">
+                                        (นางสาวจินดา พลีรักษ์)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
+
                 </div>
             </div>
 
+            {/* Print Styles */}
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
+                
+                .font-sarabun {
+                    font-family: 'TH Sarabun New', 'Sarabun', sans-serif;
+                }
+
+                @media print {
+                    @page {
+                        size: A4;
+                        margin: 0;
+                    }
+                    body * {
+                        visibility: hidden;
+                    }
+                    .daily-report-container, .daily-report-container * {
+                        visibility: visible;
+                    }
+                    .daily-report-container {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 210mm !important;
+                        height: auto !important;
+                        margin: 0 !important;
+                        padding: 5mm !important;
+                        background: white;
+                        overflow: visible !important;
+                        box-sizing: border-box;
+                        z-index: 9999;
+                    }
+                    .shadow-2xl {
+                        box-shadow: none !important;
+                    }
+                    /* Hide buttons in print */
+                    .print\\:hidden {
+                        display: none !important;
+                    }
+                }
+            `}</style>
         </div>
-    </div>
-  );
+    );
 };

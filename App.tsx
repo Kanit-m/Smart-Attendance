@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { AdminPanel } from './components/AdminPanel';
 import { TeacherPanel } from './components/TeacherPanel';
 import { LoginModal } from './components/LoginModal';
+import { PrintReportPage } from './components/PrintReportPage';
 import { Role, AppUser } from './types';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -13,6 +13,15 @@ import { Student } from './types';
 import { mapStudentData } from './utils';
 
 function App() {
+  // Simple Routing Check
+  const [isPrintMode, setIsPrintMode] = useState(false);
+
+  useEffect(() => {
+    if (window.location.pathname === '/print-report') {
+      setIsPrintMode(true);
+    }
+  }, []);
+
   const [view, setView] = useState<'dashboard' | 'admin' | 'teacher'>('dashboard');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -103,6 +112,8 @@ function App() {
           console.error("Failed to save student cache", err);
         }
 
+        // Also pre-fetch attendance if needed? No, let components handle specific dates.
+
       } catch (e) {
         console.error("Error fetching students", e);
       }
@@ -154,6 +165,11 @@ function App() {
       console.error("Logout failed", error);
     }
   };
+
+  // RENDER PRINT PAGE IF ROUTE MATCHES
+  if (isPrintMode) {
+    return <PrintReportPage />;
+  }
 
   if (isLoadingAuth) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 font-sans">กำลังโหลดระบบ...</div>;
