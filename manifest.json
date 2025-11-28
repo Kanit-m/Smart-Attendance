@@ -3,9 +3,14 @@
   "name": "ระบบเช็คชื่อโรงเรียนประชาสามัคคี",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      "src": "app-icon.png",
       "type": "image/png",
       "sizes": "512x512"
+    },
+    {
+      "src": "app-icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
     }
   ],
   "start_url": ".",
