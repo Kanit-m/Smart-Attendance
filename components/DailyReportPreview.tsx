@@ -129,22 +129,22 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
     );
 
     return (
-        <div className="bg-white w-[210mm] min-h-[297mm] p-[5mm] relative daily-report-preview mx-auto shadow-lg print:shadow-none print:m-0 print:w-full">
+        <div className="bg-white w-[210mm] min-h-[297mm] pt-[calc(10mm+1px)] pb-[calc(10mm+1px)] pl-[calc(20mm-1px)] pr-[calc(20mm-2px)] relative daily-report-preview mx-auto shadow-lg print:shadow-none print:m-0 print:w-full">
 
             {/* CONTENT START */}
-            <div className="font-sarabun text-black leading-[1] text-[15pt]">
+            <div className="font-sarabun text-black leading-[1.5] text-[14pt]">
 
                 {/* Header */}
-                <div className="text-center mb-0 leading-[1]">
-                    <h1 className="text-[15pt]">สถิตินักเรียนและการปฏิบัติหน้าที่ของครูเวรประจำวัน</h1>
-                    <h2 className="text-[15pt] mb-0">โรงเรียนประชาสามัคคี สำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 1</h2>
-                    <div className="text-[15pt]">
+                <div className="text-center mb-6 leading-[1.2] mt-[1.5em]">
+                    <h1 className="text-[14pt]">สถิตินักเรียนและการปฏิบัติหน้าที่ของครูเวรประจำวัน</h1>
+                    <h2 className="text-[14pt] mb-0">โรงเรียนประชาสามัคคี สำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 1</h2>
+                    <div className="text-[14pt]">
                         ประจำวัน {dateString} ที่ {day} เดือน {month} พ.ศ. {year}
                     </div>
                 </div>
 
                 {/* Table */}
-                <table className="w-full border-collapse border border-black mb-0 text-center text-[15pt]">
+                <table className="w-full border-collapse border border-black mb-0 text-center text-[14pt] leading-[1.05]">
                     <thead>
                         <tr className="bg-white">
                             <th className="border border-black py-2 w-10" rowSpan={2}>ที่</th>
@@ -155,15 +155,15 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
                             <th className="border border-black py-2" rowSpan={2}>หมายเหตุ</th>
                         </tr>
                         <tr>
-                            <th className="border border-black py-1 w-12">ชาย</th>
-                            <th className="border border-black py-1 w-12">หญิง</th>
-                            <th className="border border-black py-1 w-12">รวม</th>
-                            <th className="border border-black py-1 w-12">ชาย</th>
-                            <th className="border border-black py-1 w-12">หญิง</th>
-                            <th className="border border-black py-1 w-12">รวม</th>
-                            <th className="border border-black py-1 w-12">ชาย</th>
-                            <th className="border border-black py-1 w-12">หญิง</th>
-                            <th className="border border-black py-1 w-12">รวม</th>
+                            <th className="border border-black py-1 w-10">ชาย</th>
+                            <th className="border border-black py-1 w-10">หญิง</th>
+                            <th className="border border-black py-1 w-10">รวม</th>
+                            <th className="border border-black py-1 w-10">ชาย</th>
+                            <th className="border border-black py-1 w-10">หญิง</th>
+                            <th className="border border-black py-1 w-10">รวม</th>
+                            <th className="border border-black py-1 w-10">ชาย</th>
+                            <th className="border border-black py-1 w-10">หญิง</th>
+                            <th className="border border-black py-1 w-10">รวม</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -245,23 +245,23 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
                         {/* Grand Total */}
                         <tr className="border-t-2 border-black">
                             <td className="border border-black py-1" colSpan={2}>รวมนักเรียนทั้งสิ้น</td>
-                            <td className="border border-black py-1 underline decoration-double">{grandTotal.totalMale}</td>
-                            <td className="border border-black py-1 underline decoration-double">{grandTotal.totalFemale}</td>
-                            <td className="border border-black py-1 underline decoration-double">{grandTotal.total}</td>
+                            <td className="border border-black py-1 underline">{grandTotal.totalMale}</td>
+                            <td className="border border-black py-1 underline">{grandTotal.totalFemale}</td>
+                            <td className="border border-black py-1 underline">{grandTotal.total}</td>
                             <td className="border border-black py-1">{grandTotal.presentMale}</td>
                             <td className="border border-black py-1">{grandTotal.presentFemale}</td>
                             <td className="border border-black py-1">{grandTotal.presentTotal}</td>
                             <td className="border border-black py-1">{grandTotal.absentMale}</td>
                             <td className="border border-black py-1">{grandTotal.absentFemale}</td>
                             <td className="border border-black py-1">{grandTotal.absentTotal}</td>
-                            <td className="border border-black py-1 text-center px-1">ร้อยละ {percentPresent}</td>
+                            <td className="border border-black py-1 text-center px-0 whitespace-nowrap">ร้อยละ {percentPresent}</td>
                         </tr>
                     </tbody>
                 </table>
 
                 {/* Duty Log Section */}
-                <div className="mt-0">
-                    <h3 className="text-[15pt] mb-0">• บันทึกครูเวรประจำวัน</h3>
+                <div className="mt-2 leading-[1.0]">
+                    <h3 className="text-[14pt] mb-0">• บันทึกครูเวรประจำวัน</h3>
 
                     <div className="space-y-1 pl-4">
                         <div className="flex items-start gap-1">
@@ -333,7 +333,7 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
                     </div>
 
                     {/* Signatures */}
-                    <div className="mt-4 flex justify-end px-16">
+                    <div className="mt-8 flex justify-end pr-8">
                         <div className="flex flex-col gap-2 w-[360px]">
                             <div className="flex items-end gap-2">
                                 <span className="w-[35px] text-right whitespace-nowrap">ลงชื่อ</span>
@@ -351,7 +351,7 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
                         </div>
                     </div>
 
-                    <div className="mt-1 flex justify-end px-16">
+                    <div className="mt-4 flex justify-end pr-8">
                         <div className="flex flex-col gap-2 w-[360px]">
                             <div className="flex items-end gap-2">
                                 <span className="w-[35px] text-right whitespace-nowrap">ลงชื่อ</span>
@@ -397,7 +397,7 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
                         width: 210mm !important;
                         height: auto !important;
                         margin: 0 !important;
-                        padding: 5mm !important;
+                        padding: calc(10mm + 1px) calc(20mm - 2px) calc(10mm + 1px) calc(20mm - 1px) !important;
                         background: white;
                         overflow: visible !important;
                         box-sizing: border-box;
