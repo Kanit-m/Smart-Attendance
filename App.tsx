@@ -76,50 +76,50 @@ function App() {
     fetchSettings();
   }, []);
 
-  useEffect(() => {
-    // Fetch all students once (with caching)
-    const fetchStudents = async () => {
-      try {
-        const CACHE_KEY = 'cached_students';
-        const TIME_KEY = 'cached_students_time';
-        const ONE_DAY = 24 * 60 * 60 * 1000; // 24 hours
+  const fetchStudents = React.useCallback(async (force = false) => {
+    try {
+      const CACHE_KEY = 'cached_students';
+      const TIME_KEY = 'cached_students_time';
+      const CACHE_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-        const cachedData = localStorage.getItem(CACHE_KEY);
-        const cachedTime = localStorage.getItem(TIME_KEY);
-        const now = Date.now();
+      const cachedData = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(TIME_KEY);
+      const now = Date.now();
 
-        if (cachedData && cachedTime) {
-          const age = now - parseInt(cachedTime);
-          if (age < ONE_DAY) {
-            console.log(`Using cached student data (${(age / 1000 / 60).toFixed(1)} mins old)`);
-            setStudents(JSON.parse(cachedData));
-            return;
-          }
+      if (!force && cachedData && cachedTime) {
+        const age = now - parseInt(cachedTime);
+        if (age < CACHE_DURATION) {
+          console.log(`Using cached student data (${(age / 1000 / 60).toFixed(1)} mins old)`);
+          setStudents(JSON.parse(cachedData));
+          return;
         }
-
-        console.log("Fetching fresh student data from Firestore");
-        const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
-        const snap = await getDocs(q);
-        const data = snap.docs.map(doc => mapStudentData(doc.id, doc.data()));
-
-        setStudents(data);
-
-        // Save to cache
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-          localStorage.setItem(TIME_KEY, now.toString());
-        } catch (err) {
-          console.error("Failed to save student cache", err);
-        }
-
-        // Also pre-fetch attendance if needed? No, let components handle specific dates.
-
-      } catch (e) {
-        console.error("Error fetching students", e);
       }
-    };
-    fetchStudents();
+
+      console.log("Fetching fresh student data from Firestore");
+      const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+
+      setStudents(data);
+
+      // Save to cache
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(TIME_KEY, now.toString());
+        if (force) alert("อัปเดตข้อมูลเรียบร้อยแล้ว");
+      } catch (err) {
+        console.error("Failed to save student cache", err);
+      }
+
+    } catch (e) {
+      console.error("Error fetching students", e);
+      if (force) alert("เกิดข้อผิดพลาดในการอัปเดตข้อมูล");
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
     // Sanitize input: Remove ALL whitespace and convert to lowercase
@@ -183,6 +183,7 @@ function App() {
         onLoginTeacher={() => setShowTeacherLogin(true)}
         onLogout={handleLogout}
         logoUrl={logoUrl}
+        onRefresh={() => fetchStudents(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
