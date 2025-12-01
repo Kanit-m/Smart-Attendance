@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
     Users, UserCheck, UserX, Sun,
     ChevronRight, ChevronLeft, LayoutGrid,
-    Baby, BookOpen, Activity, CalendarDays, Sparkles, Download,
+    Baby, BookOpen, Activity, CalendarDays, Sparkles,
     ClipboardCheck, AlertTriangle, Clock, Printer
 } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
@@ -190,84 +190,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         setTouchEnd(0);
     };
 
-    // Export CSV Function
-    const handleExportCSV = () => {
-        if (loading || allStats.length === 0) return;
 
-        // Define CSV Headers based on report structure with 'Total' columns set to 0
-        const headers = [
-            'ชั้น',
-            'เต็ม ชาย',
-            'เต็ม หญิง',
-            'เต็ม รวม',
-            'มา ชาย',
-            'มา หญิง',
-            'มา รวม',
-            'ขาด ชาย',
-            'ขาด หญิง',
-            'ขาด รวม'
-        ];
-
-        // Map data to rows
-        const rows = allStats.map((stat, index) => {
-            return [
-                `"${stat.grade}"`,
-                stat.male,
-                stat.female,
-                0, // Request: Show 0
-                stat.presentMale,
-                stat.presentFemale,
-                0, // Request: Show 0
-                stat.absentMale,
-                stat.absentFemale,
-                0  // Request: Show 0
-            ].join(',');
-        });
-
-        // Calculate Summary Row
-        const grandTotal = allStats.reduce((acc, curr) => ({
-            male: acc.male + curr.male,
-            female: acc.female + curr.female,
-            presentMale: acc.presentMale + curr.presentMale,
-            presentFemale: acc.presentFemale + curr.presentFemale,
-            absentMale: acc.absentMale + curr.absentMale,
-            absentFemale: acc.absentFemale + curr.absentFemale
-        }), {
-            male: 0, female: 0,
-            presentMale: 0, presentFemale: 0,
-            absentMale: 0, absentFemale: 0
-        });
-
-        const summaryRow = [
-            '"รวมทั้งสิ้น"',
-            grandTotal.male,
-            grandTotal.female,
-            0, // Request: Show 0
-            grandTotal.presentMale,
-            grandTotal.presentFemale,
-            0, // Request: Show 0
-            grandTotal.absentMale,
-            grandTotal.absentFemale,
-            0  // Request: Show 0
-        ].join(',');
-
-        // Combine all parts
-        const csvContent = [headers.join(','), ...rows, summaryRow].join('\n');
-
-        // Create Blob with BOM for Excel UTF-8 support
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-
-        // Create download link
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `attendance_report_${currentDate}.csv`);
-        document.body.appendChild(link);
-        link.click();
-
-        // Cleanup
-        document.body.removeChild(link);
-    };
 
     if (loading) {
         return (
@@ -428,15 +351,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                    {/* Export Button */}
-                    <button
-                        onClick={handleExportCSV}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
-                    >
-                        <Download className="w-4 h-4" />
-                        <span>Export CSV</span>
-                    </button>
-
                     {/* Print Report Button */}
                     <button
                         onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
