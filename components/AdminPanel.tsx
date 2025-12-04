@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   UserPlus, Users, Upload, Trash2, FileSpreadsheet, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
@@ -379,8 +380,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all whitespace-nowrap w-auto md:w-full ${activeTab === tab.id
-                  ? 'bg-white text-black border border-gray-200 shadow-md'
-                  : 'text-gray-500 hover:bg-white/50 hover:text-black border border-transparent'
+                ? 'bg-white text-black border border-gray-200 shadow-md'
+                : 'text-gray-500 hover:bg-white/50 hover:text-black border border-transparent'
                 }`}
             >
               <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-brand-600' : 'text-gray-400'}`} />
@@ -586,12 +587,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
                 <button onClick={clickDeleteByGrade} disabled={!selectedDeleteGrade} className={`${BTN_DANGER} whitespace-nowrap px-6`}>ลบ</button>
               </div>
             </div>
+
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <div className="font-bold text-black">รายชื่อนักเรียน</div>
+                <select
+                  className="border border-gray-300 rounded-lg text-sm px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white text-black"
+                  onChange={(e) => setFilterGrade(e.target.value)}
+                  value={filterGrade}
+                >
+                  <option value="">แสดงทุกระดับชั้น</option>
+                  {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200"><tr><th className="p-4 w-16 text-center">#</th><th className="p-4">ชื่อ</th><th className="p-4">ชั้น</th><th className="p-4 text-right">จัดการ</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
-                    {students.map(s => (
+                    {students.filter(s => !filterGrade || s.grade === filterGrade).map(s => (
                       <tr key={s.id} className="hover:bg-gray-50">
                         <td className="p-4 text-center text-gray-400">{s.number}</td>
                         <td className="p-4 font-bold text-black">{s.name}</td>
@@ -679,7 +692,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
       </div>
 
       {/* Edit Student Modal */}
-      {editingStudent && (
+      {editingStudent && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
             <h3 className="font-bold text-xl text-black">แก้ไขข้อมูลนักเรียน</h3>
@@ -687,6 +700,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
               <div>
                 <label className="text-xs text-gray-600 font-bold block mb-1">เลขที่</label>
                 <input type="number" className={INPUT_STYLE} value={editingStudent.number} onChange={e => setEditingStudent({ ...editingStudent, number: parseInt(e.target.value) })} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600 font-bold block mb-1">รหัสประจำตัว</label>
+                <input type="text" className={INPUT_STYLE} value={editingStudent.studentId} onChange={e => setEditingStudent({ ...editingStudent, studentId: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs text-gray-600 font-bold block mb-1">ชื่อ-นามสกุล</label>
@@ -709,7 +726,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
             </div>
           </div>
         </div>
-      )}
+        , document.body)}
 
       <ConfirmationModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} onConfirm={confirmModal.action} title={confirmModal.title} message={confirmModal.message} isDangerous={confirmModal.isDangerous} isLoading={loadingAction} />
       {toast && <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-lg text-white z-[60] font-medium flex items-center gap-2 animate-slide-up ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>{toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />} {toast.message}</div>}

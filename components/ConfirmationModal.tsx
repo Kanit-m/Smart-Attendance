@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X, Loader2 } from 'lucide-react';
 
 interface ConfirmationModalProps {
@@ -22,7 +23,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
         <div className={`p-4 flex justify-between items-center border-b ${isDangerous ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
@@ -34,7 +35,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
-        
+
         <div className="p-6">
           <p className="text-gray-600 text-base leading-relaxed mb-6">
             {message}
@@ -51,9 +52,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <button
               onClick={onConfirm}
               disabled={isLoading}
-              className={`px-4 py-2 rounded-lg text-white font-medium shadow-sm hover:shadow transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
-              }`}
+              className={`px-4 py-2 rounded-lg text-white font-medium shadow-sm hover:shadow transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
+                }`}
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {isLoading ? 'กำลังดำเนินการ...' : 'ยืนยัน'}
@@ -61,6 +61,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

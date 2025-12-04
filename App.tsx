@@ -137,7 +137,22 @@ function App() {
         ? cleanUsername
         : `${cleanUsername}@school.local`;
 
-      await signInWithEmailAndPassword(auth, email, cleanPass);
+      const userCredential = await signInWithEmailAndPassword(auth, email, cleanPass);
+
+      // Verify Role immediately
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as AppUser;
+        if (userData.role !== intendedRole) {
+          await signOut(auth);
+          throw new Error(intendedRole === Role.ADMIN
+            ? "บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานในส่วนของผู้ดูแลระบบ"
+            : "บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานในส่วนของครู");
+        }
+      } else {
+        await signOut(auth);
+        throw new Error("ไม่พบข้อมูลผู้ใช้ในระบบ");
+      }
 
       // Successful login will trigger onAuthStateChanged
       if (intendedRole === Role.ADMIN) setShowAdminLogin(false);
