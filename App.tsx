@@ -5,6 +5,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { TeacherPanel } from './components/TeacherPanel';
 import { LoginModal } from './components/LoginModal';
 import { PrintReportPage } from './components/PrintReportPage';
+import { LoadingScreen } from './components/LoadingScreen';
 import { Role, AppUser } from './types';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -28,7 +29,16 @@ function App() {
   const [showTeacherLogin, setShowTeacherLogin] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isMinLoadingComplete, setIsMinLoadingComplete] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
+
+  // Minimum loading time to show the loading screen (5 seconds)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsMinLoadingComplete(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // Listen to auth state changes
@@ -186,8 +196,8 @@ function App() {
     return <PrintReportPage />;
   }
 
-  if (isLoadingAuth) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 font-sans">กำลังโหลดระบบ...</div>;
+  if (isLoadingAuth || !isMinLoadingComplete) {
+    return <LoadingScreen />;
   }
 
   return (
