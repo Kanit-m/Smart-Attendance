@@ -7,11 +7,13 @@ interface HeaderProps {
   onLoginAdmin: () => void;
   onLoginTeacher: () => void;
   onLogout: () => void;
-  logoUrl?: string;
   onRefresh?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLoginTeacher, onLogout, logoUrl, onRefresh }) => {
+// Embedded logo path
+const SCHOOL_LOGO = '/Ps logo.png';
+
+export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLoginTeacher, onLogout, onRefresh }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -29,12 +31,8 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
           {/* Branding Section */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-official-blue rounded-lg flex items-center justify-center shadow-md shrink-0 text-white">
-                {logoUrl ? (
-                  <img src={logoUrl} alt="Logo" className="w-full h-full object-cover rounded-lg" />
-                ) : (
-                  <School className="w-6 h-6" />
-                )}
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center shadow-md shrink-0 overflow-hidden">
+                <img src={SCHOOL_LOGO} alt="Logo" className="w-full h-full object-cover" />
               </div>
               <div className="flex flex-col">
                 <h1 className="text-lg md:text-xl font-bold text-official-blue leading-tight tracking-tight">Smart Attendance (A.T)</h1>

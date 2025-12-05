@@ -71,12 +71,17 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     // Multi-Selection State
     const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
 
+    // Track if holidays have been loaded
+    const [holidaysLoaded, setHolidaysLoaded] = useState(false);
+
     // --- Data Loading ---
     useEffect(() => {
+        if (holidaysLoaded) return; // Skip if already loaded
         getDocs(query(collection(db, 'holidays'))).then(snap => {
             setHolidays(snap.docs.map(d => d.data() as Holiday));
+            setHolidaysLoaded(true);
         });
-    }, []);
+    }, [holidaysLoaded]);
 
     useEffect(() => {
         if (currentUser.role === Role.TEACHER && currentUser.assignedClass) {

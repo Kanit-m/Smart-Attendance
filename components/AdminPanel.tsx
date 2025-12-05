@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom';
 import {
   UserPlus, Users, Upload, Trash2, FileSpreadsheet, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
-  GraduationCap, ArrowRight, Pencil, X, AlertCircle, Edit2, Menu, Image as ImageIcon
+  GraduationCap, ArrowRight, Pencil, X, AlertCircle, Edit2, Menu
 } from 'lucide-react';
 import {
-  collection, addDoc, getDocs, deleteDoc, doc, getDoc,
+  collection, addDoc, getDocs, deleteDoc, doc,
   query, where, writeBatch, updateDoc, setDoc
 } from 'firebase/firestore/lite';
 import * as firebaseApp from 'firebase/app';
@@ -63,14 +63,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
     name: '', assignedClass: GRADE_OPTIONS[0], username: '', password: ''
   });
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [logoUrlInput, setLogoUrlInput] = useState('');
   const [holidayForm, setHolidayForm] = useState({ date: '', description: '' });
 
+  // Track if data has been loaded to prevent redundant fetches
+  const [dataLoaded, setDataLoaded] = useState({
+    students: false,
+    teachers: false,
+    holidays: false
+  });
+
+  // Only fetch data when tab is accessed AND data hasn't been loaded yet
   useEffect(() => {
-    if (activeTab === 0 || activeTab === 1 || activeTab === 4) fetchStudents();
-    if (activeTab === 3) fetchTeachers();
-    if (activeTab === 5) { fetchSettings(); fetchHolidays(); }
-  }, [activeTab]);
+    if ((activeTab === 0 || activeTab === 1 || activeTab === 4) && !dataLoaded.students) {
+      fetchStudents();
+    }
+    if (activeTab === 3 && !dataLoaded.teachers) {
+      fetchTeachers();
+    }
+    if (activeTab === 5) {
+      if (!dataLoaded.holidays) fetchHolidays();
+    }
+  }, [activeTab, dataLoaded]);
 
   useEffect(() => {
     if (editingHoliday) {
@@ -97,6 +110,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         return gradeA.localeCompare(gradeB);
       });
       setStudents(data);
+      setDataLoaded(prev => ({ ...prev, students: true }));
     } catch (error) { console.error(error); showToast("โหลดข้อมูลไม่สำเร็จ", 'error'); } finally { setLoadingData(false); }
   };
 
@@ -106,16 +120,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
       const q = query(collection(db, 'users'), where('role', '==', Role.TEACHER));
       const snapshot = await getDocs(q);
       setTeachers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+      setDataLoaded(prev => ({ ...prev, teachers: true }));
     } catch (error) { console.error(error); } finally { setLoadingData(false); }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const docRef = doc(db, 'settings', 'school');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) setLogoUrlInput(docSnap.data().logoUrl || '');
-    } catch (e) { console.error(e); }
-  };
+
 
   const fetchHolidays = async () => {
     setLoadingData(true);
@@ -125,6 +134,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Holiday));
       data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       setHolidays(data);
+      setDataLoaded(prev => ({ ...prev, holidays: true }));
     } catch (e) { console.error(e); } finally { setLoadingData(false); }
   };
 
@@ -304,37 +314,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
     setNewTeacher({ name: '', assignedClass: GRADE_OPTIONS[0], username: '', password: '' });
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 800 * 1024) {
-        showToast('ไฟล์ขนาดใหญ่เกินไป (ต้องไม่เกิน 800KB) เพื่อบันทึกลงฐานข้อมูลโดยตรง', 'error');
-        e.target.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoUrlInput(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  const handleUpdateLogo = async () => {
-    if (logoUrlInput) {
-      setLoadingAction(true);
-      try {
-        await setDoc(doc(db, 'settings', 'school'), { logoUrl: logoUrlInput }, { merge: true });
-        showToast('บันทึกโลโก้เรียบร้อย (รีเฟรชเพื่อดูการเปลี่ยนแปลง)', 'success');
-        setTimeout(() => window.location.reload(), 1000);
-      } catch (e) {
-        console.error(e);
-        showToast('บันทึกไม่สำเร็จ', 'error');
-      } finally {
-        setLoadingAction(false);
-      }
-    }
-  };
+
 
   const handleHolidaySubmit = async () => {
     if (!holidayForm.date) return;
@@ -412,7 +393,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
 
       {/* Content Area */}
       <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-white/30">
-        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} /></div>}
+        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} holidays={holidays} /></div>}
 
         {activeTab === 1 && (
           <div className="space-y-4 animate-fade-in">
@@ -624,33 +605,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
 
         {activeTab === 5 && (
           <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
-              <h3 className="font-bold mb-4 text-black flex items-center gap-2"><ImageIcon className="w-5 h-5" /> ตั้งค่า Logo โรงเรียน</h3>
-              <div className="space-y-3">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-gray-700">เลือกไฟล์รูปภาพ (โลโก้จะถูกแปลงเป็นโค้ดและเก็บในฐานข้อมูล)</label>
-                  <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:bg-gray-100 transition-colors cursor-pointer relative">
-                    <input type="file" accept="image/*" onChange={handleLogoFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <div className="flex flex-col items-center gap-2 text-gray-400 pointer-events-none">
-                      <Upload className="w-10 h-10" />
-                      <span className="text-sm font-bold">คลิกเพื่อเลือกรูปภาพ (Max 800KB)</span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Preview Area */}
-                {logoUrlInput && (
-                  <div className="mt-4 p-4 border border-gray-100 rounded-xl bg-white flex flex-col items-center shadow-sm">
-                    <p className="text-xs text-gray-500 mb-2">ตัวอย่างที่แสดงผล:</p>
-                    <img src={logoUrlInput} alt="Logo Preview" className="h-24 object-contain" />
-                  </div>
-                )}
-
-                <button onClick={handleUpdateLogo} disabled={loadingAction || !logoUrlInput} className={`${BTN_PRIMARY} w-full mt-2 py-3`}>
-                  {loadingAction ? 'กำลังบันทึก...' : 'บันทึกโลโก้'}
-                </button>
-              </div>
-            </div>
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
               <h3 className="font-bold mb-4 text-black flex items-center gap-2"><Calendar className="w-5 h-5 text-brand-600" /> จัดการวันหยุด</h3>
               <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">

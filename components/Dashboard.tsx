@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     Users, UserCheck, UserX, Sun,
     ChevronRight, ChevronLeft, LayoutGrid,
@@ -9,12 +9,12 @@ import {
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday } from '../types';
-import { mapStudentData } from '../utils';
 import { DailyReport } from './DailyReport';
 
 interface DashboardProps {
     embedded?: boolean;
     students?: Student[];
+    holidays?: Holiday[];  // Pass from parent to avoid refetch on remount
 }
 
 interface GradeStats {
@@ -32,9 +32,10 @@ interface GradeStats {
     isSubmitted: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [] }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays }) => {
     // Initialize with Today's date
     const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const dateInputRef = useRef<HTMLInputElement>(null);
 
     const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -55,15 +56,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Report Modal State
     const [showReportModal, setShowReportModal] = useState(false);
 
+    // Use parent holidays if provided, otherwise cache locally
+    const [holidaysCache, setHolidaysCache] = useState<Holiday[] | null>(parentHolidays || null);
+
     useEffect(() => {
         fetchData(currentDate);
-    }, [currentDate]);
+    }, [currentDate]); // Only re-fetch when date changes
 
     const fetchData = async (targetDate: string) => {
         setLoading(true);
         try {
-            const holidaysSnapshot = await getDocs(collection(db, 'holidays'));
-            const holidays = holidaysSnapshot.docs.map(doc => doc.data() as Holiday);
+            // Use parent holidays or cached holidays, only fetch if neither available
+            let holidays = parentHolidays || holidaysCache;
+            if (!holidays) {
+                const holidaysSnapshot = await getDocs(collection(db, 'holidays'));
+                holidays = holidaysSnapshot.docs.map(doc => doc.data() as Holiday);
+                setHolidaysCache(holidays);
+            }
+
             const holiday = holidays.find(h => h.date === targetDate);
             setTodayHoliday(holiday || null);
 
@@ -351,18 +361,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                    {/* Print Report Button */}
+                    {/* Print Report Button - Hidden on mobile */}
                     <button
                         onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
+                        className="hidden md:flex w-full sm:w-auto items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
                     >
                         <Printer className="w-4 h-4" />
                         <span>พิมพ์รายงาน</span>
                     </button>
 
                     {/* DATE PICKER COMPONENT */}
-                    <div className="relative group w-full sm:w-auto">
-                        <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 hover:border-brand-400 hover:shadow-md transition-all cursor-pointer">
+                    <div
+                        className="relative group w-full sm:w-auto cursor-pointer"
+                        onClick={() => dateInputRef.current?.showPicker?.()}
+                    >
+                        {/* Hidden Date Input */}
+                        <input
+                            ref={dateInputRef}
+                            type="date"
+                            value={currentDate}
+                            onChange={(e) => setCurrentDate(e.target.value)}
+                            className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+                        />
+                        <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 group-hover:border-brand-400 group-hover:shadow-md transition-all">
                             <CalendarDays className="w-5 h-5 text-brand-600 group-hover:text-brand-700" />
                             <div className="flex flex-col items-start">
                                 <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-0.5">วันที่ข้อมูล</span>
@@ -370,13 +391,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                     {new Date(currentDate).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                                 </span>
                             </div>
-                            {/* Invisible Date Input covering the area */}
-                            <input
-                                type="date"
-                                value={currentDate}
-                                onChange={(e) => setCurrentDate(e.target.value)}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                            />
                         </div>
                     </div>
                 </div>
@@ -419,72 +433,72 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             )}
 
             {/* Top Stats Grid - Smart Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {/* Card 0: Submission Status (NEW) */}
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                    <div className={`absolute right-0 top-0 w-24 h-24 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
+                <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className={`absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
                     <div className="relative z-10">
-                        <p className="text-gray-500 text-sm font-bold mb-1">สถานะการบันทึก</p>
-                        <div className="flex items-baseline gap-2">
-                            <h3 className={`text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
-                                {submittedClasses}<span className="text-2xl text-gray-400">/{totalClasses}</span>
+                        <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">สถานะบันทึก</p>
+                        <div className="flex items-baseline gap-1 md:gap-2">
+                            <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                {submittedClasses}<span className="text-lg md:text-2xl text-gray-400">/{totalClasses}</span>
                             </h3>
                         </div>
-                        <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+                        <div className="mt-1 md:mt-2 w-full bg-gray-100 rounded-full h-1 md:h-1.5">
                             <div
-                                className={`h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                className={`h-1 md:h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
                                 style={{ width: `${totalClasses > 0 ? (submittedClasses / totalClasses) * 100 : 0}%` }}
                             ></div>
                         </div>
                     </div>
-                    <div className={`relative z-10 p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                        <ClipboardCheck className="w-8 h-8" />
+                    <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                        <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
                     </div>
                 </div>
                 {/* Card 1: Total Students */}
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-blue-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110"></div>
                     <div className="relative z-10">
-                        <p className="text-gray-500 text-sm font-bold mb-1">นักเรียนทั้งหมด</p>
-                        <h3 className="text-4xl font-bold text-black">{totalStudents}</h3>
-                        <div className="flex gap-2 mt-2">
-                            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md">ชาย {totalMale}</span>
-                            <span className="text-xs font-medium text-pink-600 bg-pink-50 px-2 py-1 rounded-md">หญิง {totalFemale}</span>
+                        <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">นักเรียนทั้งหมด</p>
+                        <h3 className="text-2xl md:text-4xl font-bold text-black">{totalStudents}</h3>
+                        <div className="flex flex-wrap gap-1 md:gap-2 mt-1 md:mt-2">
+                            <span className="text-[10px] md:text-xs font-medium text-blue-600 bg-blue-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md">ช {totalMale}</span>
+                            <span className="text-[10px] md:text-xs font-medium text-pink-600 bg-pink-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md">ญ {totalFemale}</span>
                         </div>
                     </div>
-                    <div className="relative z-10 bg-blue-100 p-3 rounded-xl text-blue-600">
-                        <Users className="w-8 h-8" />
+                    <div className="relative z-10 bg-blue-100 p-2 md:p-3 rounded-xl text-blue-600">
+                        <Users className="w-5 h-5 md:w-8 md:h-8" />
                     </div>
                 </div>
 
                 {/* Card 2: Present */}
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-emerald-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110"></div>
                     <div className="relative z-10">
-                        <p className="text-gray-500 text-sm font-bold mb-1">มาเรียน</p>
-                        <div className="flex items-baseline gap-2">
-                            <h3 className="text-4xl font-bold text-emerald-600">{totalPresent}</h3>
-                            <span className="text-sm font-bold text-emerald-500">({percentPresent}%)</span>
+                        <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">มาเรียน</p>
+                        <div className="flex items-baseline gap-1 md:gap-2">
+                            <h3 className="text-2xl md:text-4xl font-bold text-emerald-600">{totalPresent}</h3>
+                            <span className="text-[10px] md:text-sm font-bold text-emerald-500">({percentPresent}%)</span>
                         </div>
-                        <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
-                            <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${percentPresent}%` }}></div>
+                        <div className="mt-1 md:mt-2 w-full bg-gray-100 rounded-full h-1 md:h-1.5">
+                            <div className="bg-emerald-500 h-1 md:h-1.5 rounded-full" style={{ width: `${percentPresent}%` }}></div>
                         </div>
                     </div>
-                    <div className="relative z-10 bg-emerald-100 p-3 rounded-xl text-emerald-600">
-                        <UserCheck className="w-8 h-8" />
+                    <div className="relative z-10 bg-emerald-100 p-2 md:p-3 rounded-xl text-emerald-600">
+                        <UserCheck className="w-5 h-5 md:w-8 md:h-8" />
                     </div>
                 </div>
 
                 {/* Card 3: Absent */}
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-rose-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-rose-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110"></div>
                     <div className="relative z-10">
-                        <p className="text-gray-500 text-sm font-bold mb-1">ขาด / ลา / ป่วย</p>
-                        <h3 className="text-4xl font-bold text-rose-600">{totalAbsent}</h3>
-                        <p className="text-xs text-gray-400 mt-2">คน</p>
+                        <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">ขาด/ลา/ป่วย</p>
+                        <h3 className="text-2xl md:text-4xl font-bold text-rose-600">{totalAbsent}</h3>
+                        <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2">คน</p>
                     </div>
-                    <div className="relative z-10 bg-rose-100 p-3 rounded-xl text-rose-600">
-                        <UserX className="w-8 h-8" />
+                    <div className="relative z-10 bg-rose-100 p-2 md:p-3 rounded-xl text-rose-600">
+                        <UserX className="w-5 h-5 md:w-8 md:h-8" />
                     </div>
                 </div>
             </div>

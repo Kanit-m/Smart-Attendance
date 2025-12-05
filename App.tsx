@@ -6,11 +6,11 @@ import { TeacherPanel } from './components/TeacherPanel';
 import { LoginModal } from './components/LoginModal';
 import { PrintReportPage } from './components/PrintReportPage';
 import { LoadingScreen } from './components/LoadingScreen';
-import { Role, AppUser } from './types';
+import { LandingPage } from './components/LandingPage';
+import { Role, AppUser, Student } from './types';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
-import { Student } from './types';
 import { mapStudentData } from './utils';
 
 function App() {
@@ -23,11 +23,10 @@ function App() {
     }
   }, []);
 
-  const [view, setView] = useState<'dashboard' | 'admin' | 'teacher'>('dashboard');
+  const [view, setView] = useState<'landing' | 'dashboard' | 'admin' | 'teacher'>('landing');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showTeacherLogin, setShowTeacherLogin] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isMinLoadingComplete, setIsMinLoadingComplete] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
@@ -62,7 +61,7 @@ function App() {
         }
       } else {
         setCurrentUser(null);
-        setView('dashboard');
+        setView('landing');
       }
       setIsLoadingAuth(false);
     });
@@ -70,21 +69,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    // Fetch school settings
-    const fetchSettings = async () => {
-      try {
-        const docRef = doc(db, 'settings', 'school');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setLogoUrl(docSnap.data().logoUrl);
-        }
-      } catch (e) {
-        console.log("Error fetching settings", e);
-      }
-    };
-    fetchSettings();
-  }, []);
+
 
   const fetchStudents = React.useCallback(async (force = false) => {
     try {
@@ -185,7 +170,7 @@ function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setView('dashboard');
+      setView('landing');
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -200,6 +185,33 @@ function App() {
     return <LoadingScreen />;
   }
 
+  // Show Landing Page
+  if (view === 'landing' && !currentUser) {
+    return (
+      <>
+        <LandingPage
+          onGoToDashboard={() => setView('dashboard')}
+          onLoginAdmin={() => setShowAdminLogin(true)}
+          onLoginTeacher={() => setShowTeacherLogin(true)}
+        />
+        <LoginModal
+          isOpen={showAdminLogin}
+          onClose={() => setShowAdminLogin(false)}
+          title="เข้าสู่ระบบผู้ดูแล"
+          buttonColor="red"
+          onLogin={(u, p) => handleLogin(u, p, Role.ADMIN)}
+        />
+        <LoginModal
+          isOpen={showTeacherLogin}
+          onClose={() => setShowTeacherLogin(false)}
+          title="เข้าสู่ระบบครู"
+          buttonColor="green"
+          onLogin={(u, p) => handleLogin(u, p, Role.TEACHER)}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 font-sans">
       <Header
@@ -207,7 +219,6 @@ function App() {
         onLoginAdmin={() => setShowAdminLogin(true)}
         onLoginTeacher={() => setShowTeacherLogin(true)}
         onLogout={handleLogout}
-        logoUrl={logoUrl}
         onRefresh={() => fetchStudents(true)}
       />
 
