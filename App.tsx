@@ -29,6 +29,8 @@ function App() {
   const [showTeacherLogin, setShowTeacherLogin] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isMinLoadingComplete, setIsMinLoadingComplete] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [showContent, setShowContent] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
 
   // Minimum loading time to show the loading screen (5 seconds)
@@ -38,6 +40,17 @@ function App() {
     }, 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle transition from loading to content
+  useEffect(() => {
+    if (!isLoadingAuth && isMinLoadingComplete && !isTransitioning && !showContent) {
+      // Start transition animation
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setShowContent(true);
+      }, 400); // Match CSS transition duration
+    }
+  }, [isLoadingAuth, isMinLoadingComplete, isTransitioning, showContent]);
 
   useEffect(() => {
     // Listen to auth state changes
@@ -181,14 +194,19 @@ function App() {
     return <PrintReportPage />;
   }
 
-  if (isLoadingAuth || !isMinLoadingComplete) {
-    return <LoadingScreen />;
+  // Show loading screen with fade-out transition
+  if (!showContent) {
+    return (
+      <div className={`transition-all duration-400 ${isTransitioning ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}>
+        <LoadingScreen />
+      </div>
+    );
   }
 
-  // Show Landing Page
+  // Show Landing Page with fade-in animation
   if (view === 'landing' && !currentUser) {
     return (
-      <>
+      <div className="animate-fade-in">
         <LandingPage
           onGoToDashboard={() => setView('dashboard')}
           onLoginAdmin={() => setShowAdminLogin(true)}
@@ -208,7 +226,7 @@ function App() {
           buttonColor="green"
           onLogin={(u, p) => handleLogin(u, p, Role.TEACHER)}
         />
-      </>
+      </div>
     );
   }
 

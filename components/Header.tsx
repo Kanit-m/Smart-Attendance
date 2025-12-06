@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { School, UserCog, GraduationCap, LogOut, RefreshCw } from 'lucide-react';
+import { UserCog, GraduationCap, LogOut, RefreshCw } from 'lucide-react';
 import { Role } from '../types';
 
 interface HeaderProps {

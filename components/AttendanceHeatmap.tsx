@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AttendanceStatus } from '../types';
 
 interface AttendanceHeatmapProps {
@@ -8,12 +8,13 @@ interface AttendanceHeatmapProps {
 }
 
 export const AttendanceHeatmap: React.FC<AttendanceHeatmapProps> = ({ records, days, className = '' }) => {
-    // Create an array of the last 'days' dates
-    const dateArray = Array.from({ length: days }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (days - 1 - i));
-        return d.toISOString().split('T')[0];
-    });
+    // Create an array of the last 'days' dates - memoized to prevent recalculation
+    const dateArray = useMemo(() =>
+        Array.from({ length: days }, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - (days - 1 - i));
+            return d.toISOString().split('T')[0];
+        }), [days]);
 
     const getStatusColor = (status?: AttendanceStatus) => {
         switch (status) {

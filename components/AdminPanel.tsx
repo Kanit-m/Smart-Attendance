@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  UserPlus, Users, Upload, Trash2, FileSpreadsheet, Settings, Calendar, Loader2,
+  UserPlus, Users, Upload, Trash2, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
-  GraduationCap, ArrowRight, Pencil, X, AlertCircle, Edit2, Menu
+  GraduationCap, Pencil, Edit2
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -83,7 +83,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
     if (activeTab === 5) {
       if (!dataLoaded.holidays) fetchHolidays();
     }
-  }, [activeTab, dataLoaded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
 
   useEffect(() => {
     if (editingHoliday) {
@@ -141,12 +142,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStudent.studentId) return showToast('ระบุรหัสนักเรียน', 'error');
+    setLoadingAction(true);
     try {
       await setDoc(doc(db, 'students', newStudent.studentId), newStudent);
       showToast('เพิ่มสำเร็จ', 'success');
       setNewStudent({ studentId: '', number: 0, name: '', grade: GRADE_OPTIONS[0], gender: Gender.MALE });
       if (activeTab === 1 || activeTab === 4) fetchStudents();
     } catch (err) { console.error(err); showToast('เกิดข้อผิดพลาด', 'error'); }
+    finally { setLoadingAction(false); }
   };
 
   const handleCSVUpload = async (e: React.FormEvent) => {
@@ -207,7 +210,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
           const q = query(collection(db, 'students'), where('grade', '==', selectedDeleteGrade));
           const snapshot = await getDocs(q);
           const batch = writeBatch(db);
-          snapshot.docs.forEach(doc => batch.delete(doc.ref));
+          snapshot.docs.forEach(docSnap => batch.delete(docSnap.ref));
           await batch.commit();
           setStudents(prev => prev.filter(s => s.grade !== selectedDeleteGrade));
           setSelectedDeleteGrade('');

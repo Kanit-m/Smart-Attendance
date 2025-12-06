@@ -1,7 +1,7 @@
 import React from 'react';
 import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
 import { AttendanceHeatmap } from './AttendanceHeatmap';
-import { User, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 interface StudentHistoryCardProps {
     student: Student;

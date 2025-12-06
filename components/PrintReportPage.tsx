@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { Student, AttendanceRecord, AppUser } from '../types';
 import { mapStudentData } from '../utils';
 import { DailyReportPreview } from './DailyReportPreview';
+import { PrintLoading } from './PrintLoading';
 import { Printer, ArrowLeft } from 'lucide-react';
 
 export const PrintReportPage: React.FC = () => {
@@ -21,19 +22,31 @@ export const PrintReportPage: React.FC = () => {
         teacherName: ''
     });
 
-    // Get date from URL
+    // Track if initial URL parse is complete
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // Get date from URL on initial load
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const dateParam = params.get('date');
         if (dateParam) {
             setDate(dateParam);
         }
+        // Mark as initialized after setting date from URL
+        setIsInitialized(true);
     }, []);
 
-    // Fetch Data
+    // Fetch Data when date changes (after initialization)
     useEffect(() => {
+        // Don't fetch until URL params have been processed
+        if (!isInitialized) {
+            return;
+        }
+
         const fetchData = async () => {
             setLoading(true);
+            const startTime = Date.now();
+
             try {
                 // 1. Fetch Students
                 const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
@@ -42,7 +55,6 @@ export const PrintReportPage: React.FC = () => {
                 setStudents(studentsData);
 
                 // 2. Fetch Attendance for the date
-                // Correctly query the root 'attendance' collection by date
                 const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', date));
                 const attendanceSnap = await getDocs(attendanceQuery);
                 const attendanceData = attendanceSnap.docs.map(doc => doc.data() as AttendanceRecord);
@@ -51,25 +63,32 @@ export const PrintReportPage: React.FC = () => {
             } catch (error) {
                 console.error("Error fetching report data:", error);
             } finally {
-                setLoading(false);
+                // Ensure minimum 3 seconds loading time for smooth animation
+                const elapsedTime = Date.now() - startTime;
+                const minLoadingTime = 3000;
+                const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+
+                setTimeout(() => {
+                    setLoading(false);
+                }, remainingTime);
             }
         };
 
         if (date) {
             fetchData();
         }
-    }, [date]);
+    }, [date, isInitialized]);
 
     const handlePrint = () => {
         window.print();
     };
 
     if (loading) {
-        return <div className="min-h-screen flex items-center justify-center">กำลังโหลดข้อมูล...</div>;
+        return <PrintLoading message="กำลังโหลดข้อมูล" />;
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">
+        <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row animate-fade-in">
             {/* Left: Control Panel (Hidden in Print) */}
             <div className="w-full md:w-1/3 lg:w-1/4 bg-white border-r p-6 overflow-y-auto h-screen sticky top-0 print:hidden shadow-lg z-10">
                 <div className="mb-6 flex items-center justify-between">
@@ -186,6 +205,23 @@ export const PrintReportPage: React.FC = () => {
                     dutyLog={dutyLog}
                 />
             </div>
+
+            {/* Fade In Animation Styles */}
+            <style>{`
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                .animate-fade-in {
+                    animation: fadeIn 0.5s ease-out forwards;
+                }
+            `}</style>
         </div>
     );
 };
