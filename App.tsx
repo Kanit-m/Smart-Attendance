@@ -250,7 +250,7 @@ function App() {
               <h2 className="text-2xl font-bold text-gray-800">ระบบผู้ดูแล</h2>
               <p className="text-gray-500">จัดการข้อมูลนักเรียน ครู และการตั้งค่าระบบ</p>
             </div>
-            <AdminPanel onSwitchToTeacherView={() => setView('teacher')} onLogout={handleLogout} />
+            <AdminPanel onSwitchToTeacherView={() => setView('teacher')} onLogout={handleLogout} onStudentChange={() => fetchStudents(true)} />
           </div>
         )}
 
@@ -262,7 +262,7 @@ function App() {
             </div>
             <TeacherPanel
               currentUser={currentUser!}
-              allStudents={students.filter(s => s.status !== StudentStatus.WITHDRAWN)}
+              allStudents={students}
               onBackToAdmin={currentUser?.role === Role.ADMIN ? () => setView('admin') : undefined}
               onLogout={handleLogout}
             />

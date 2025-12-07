@@ -11,7 +11,7 @@ import {
     collection, getDocs, query, where, writeBatch, doc
 } from 'firebase/firestore/lite';
 import { db } from '../firebase';
-import { Student, AttendanceStatus, Holiday, Role, Gender, AttendanceRecord } from '../types';
+import { Student, AttendanceStatus, Holiday, Role, Gender, AttendanceRecord, StudentStatus } from '../types';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AttendanceHeatmap } from './AttendanceHeatmap';
@@ -93,14 +93,21 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         setLoading(true);
         setHistoryData(null); // Reset history when class changes
 
-        // Filter from cached students (already excludes withdrawn students from App.tsx)
-        const data = allStudents.filter(s => s.grade === selectedClass);
+        // Filter students based on selectedDate - include students who hadn't withdrawn by that date
+        const viewingTimestamp = new Date(selectedDate).getTime() + (24 * 60 * 60 * 1000); // End of viewing day
+        const data = allStudents.filter(s => {
+            if (s.grade !== selectedClass) return false;
+            // Include if never withdrawn
+            if (s.status !== StudentStatus.WITHDRAWN || !s.withdrawnAt) return true;
+            // Include if withdrew AFTER the viewing date
+            return s.withdrawnAt > viewingTimestamp;
+        });
         data.sort((a, b) => (a.number || 0) - (b.number || 0));
         setStudents(data);
         setLoading(false);
         // Clear selection when class changes
         setSelectedStudentIds(new Set());
-    }, [selectedClass, allStudents]);
+    }, [selectedClass, allStudents, selectedDate]);
 
     // Refactored loading logic to be reusable for Reset
     const loadAttendanceData = useCallback(async () => {

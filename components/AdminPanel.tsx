@@ -21,6 +21,7 @@ import { AdminBottomNav } from './AdminBottomNav';
 interface AdminPanelProps {
   onSwitchToTeacherView: () => void;
   onLogout: () => void;
+  onStudentChange?: () => void; // Called after student data changes (add/delete/withdraw)
 }
 
 const GRADE_OPTIONS = [
@@ -41,7 +42,7 @@ const BTN_SECONDARY = "border border-gray-300 bg-white text-black px-4 py-2 roun
 const BTN_SUCCESS = "bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center";
 const BTN_DANGER = "bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed";
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout, onStudentChange }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<AppUser[]>([]);
@@ -216,6 +217,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.WITHDRAWN, withdrawnAt: Date.now() } : s));
           showToast(`${name} ถูกบันทึกเป็น "ลาออก"`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onStudentChange?.(); // Trigger cache refresh
         }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
         finally { setLoadingAction(false); }
@@ -236,6 +238,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.ACTIVE, withdrawnAt: undefined } : s));
           showToast(`${name} กลับมาเป็นนักเรียนปกติแล้ว`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onStudentChange?.(); // Trigger cache refresh
         }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
         finally { setLoadingAction(false); }
