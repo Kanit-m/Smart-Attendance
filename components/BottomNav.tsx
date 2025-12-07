@@ -75,7 +75,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   relative flex items-center gap-2 px-4 py-2 rounded-full
                   transition-all duration-300 ease-out
                   ${isActive
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 scale-105'
+                                        ? 'bg-gradient-to-r from-slate-600 to-slate-800 text-white shadow-lg shadow-slate-500/30 scale-105'
                                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
                                     }
                 `}

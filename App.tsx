@@ -279,8 +279,8 @@ function App() {
         {view === 'teacher' && (
           <div className="animate-fade-in h-full md:h-auto">
             <div className="mb-6 print:hidden hidden md:block">
-              <h2 className="text-2xl font-bold text-gray-800">ระบบครู</h2>
-              <p className="text-gray-500">บันทึกการมาเรียนและรายงานสถิติ</p>
+              <h2 className="text-2xl font-bold" style={{ color: '#003060' }}>ระบบครู</h2>
+              <p className="text-gray-600">บันทึกการมาเรียนและรายงานสถิติ</p>
             </div>
             <TeacherPanel
               currentUser={currentUser!}

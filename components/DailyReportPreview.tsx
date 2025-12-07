@@ -1,5 +1,5 @@
 import React from 'react';
-import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
+import { Student, AttendanceRecord, AttendanceStatus, Gender, StudentStatus } from '../types';
 
 interface DailyReportPreviewProps {
     students: Student[];
@@ -25,10 +25,26 @@ const sumStats = (...statsArray: GradeStats[]): GradeStats => statsArray.reduce(
 }), { totalMale: 0, totalFemale: 0, total: 0, presentMale: 0, presentFemale: 0, presentTotal: 0, absentMale: 0, absentFemale: 0, absentTotal: 0 });
 
 export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students, attendances, date, dutyLog }) => {
+    // Filter students based on report date - include students who were active at that time
+    // Students who withdrew AFTER the report date should be included
+    const reportDate = new Date(date);
+    reportDate.setHours(23, 59, 59, 999); // End of day
+    
+    const activeStudents = students.filter(s => {
+        // Include ACTIVE students
+        if (s.status !== StudentStatus.WITHDRAWN) return true;
+        // Include WITHDRAWN students if they withdrew AFTER the report date
+        if (s.withdrawnAt) {
+            const withdrawnDate = new Date(s.withdrawnAt);
+            return withdrawnDate > reportDate;
+        }
+        return false;
+    });
+
     // Helper to get stats for a specific grade
     const getStats = (gradePattern: string | string[]): GradeStats => {
         const targetGrades = Array.isArray(gradePattern) ? gradePattern : [gradePattern];
-        const gradeStudents = students.filter(s => targetGrades.includes(s.grade));
+        const gradeStudents = activeStudents.filter(s => targetGrades.includes(s.grade));
         const totalMale = gradeStudents.filter(s => s.gender === Gender.MALE).length;
         const totalFemale = gradeStudents.filter(s => s.gender === Gender.FEMALE).length;
         const total = totalMale + totalFemale;

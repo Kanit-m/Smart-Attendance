@@ -402,10 +402,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   ];
 
   return (
-    <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0">
+    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: 'linear-gradient(to left, #F7D6D0, #FFC5D0)' }}>
 
       {/* Sidebar - Hidden on mobile */}
-      <div className="hidden md:flex w-64 bg-white/50 border-r border-gray-200 flex-col shrink-0">
+      <div className="hidden md:flex w-64 bg-white/60 border-r border-white/30 flex-col shrink-0">
         <div className="flex md:flex-col p-2 md:p-4 gap-1 md:gap-2 min-w-max md:min-w-0 w-full">
           {tabs.map((tab) => (
             <button

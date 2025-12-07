@@ -336,19 +336,19 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
     const SidebarContent = () => (
         <div className="flex flex-col h-full no-print">
-            <div className={`flex items-center h-16 px-4 border-b border-gray-100 ${!isSidebarOpen && 'justify-center px-0'}`}>
+            <div className={`flex items-center h-16 px-4 border-b border-white/20 ${!isSidebarOpen && 'justify-center px-0'}`}>
                 {isSidebarOpen ? (
-                    <div className="flex items-center gap-3 text-brand-700 overflow-hidden whitespace-nowrap w-full">
-                        <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-3 text-white overflow-hidden whitespace-nowrap w-full">
+                        <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
                             <Contact className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col w-full overflow-hidden pr-2">
                             <span className="font-bold text-sm leading-tight">เมนูจัดการ</span>
-                            <span className="text-[10px] text-gray-500">{selectedClass}</span>
+                            <span className="text-[10px] text-white/70">{selectedClass}</span>
                         </div>
                     </div>
                 ) : (
-                    <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white shrink-0">
                         <Contact className="w-5 h-5" />
                     </div>
                 )}
@@ -357,46 +357,46 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             <div className="flex-1 py-4 space-y-1 px-2">
                 <button
                     onClick={() => setCurrentView('check')}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'check' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'check' ? 'bg-white text-gray-800 font-bold shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'} ${!isSidebarOpen && 'justify-center'}`}
                     title="เช็คชื่อ"
                 >
-                    <ClipboardList className={`w-5 h-5 ${currentView === 'check' ? 'text-brand-600' : 'text-gray-400'}`} />
+                    <ClipboardList className={`w-5 h-5 ${currentView === 'check' ? 'text-[#003060]' : 'text-white/60'}`} />
                     {isSidebarOpen && <span>เช็คชื่อนักเรียน</span>}
                 </button>
 
                 <button
                     onClick={() => setCurrentView('dashboard')}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'dashboard' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'dashboard' ? 'bg-white text-gray-800 font-bold shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'} ${!isSidebarOpen && 'justify-center'}`}
                     title="แดชบอร์ด"
                 >
-                    <LayoutDashboard className={`w-5 h-5 ${currentView === 'dashboard' ? 'text-brand-600' : 'text-gray-400'}`} />
+                    <LayoutDashboard className={`w-5 h-5 ${currentView === 'dashboard' ? 'text-[#003060]' : 'text-white/60'}`} />
                     {isSidebarOpen && <span>สรุปผลประจำวัน</span>}
                 </button>
 
-                <div className="border-t border-gray-100 my-2 mx-2"></div>
+                <div className="border-t border-white/20 my-2 mx-2"></div>
 
                 <button
                     onClick={() => setCurrentView('room_history')}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'room_history' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'room_history' ? 'bg-white text-gray-800 font-bold shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'} ${!isSidebarOpen && 'justify-center'}`}
                     title="รายงานห้องเรียน"
                 >
-                    <History className={`w-5 h-5 ${currentView === 'room_history' ? 'text-brand-600' : 'text-gray-400'}`} />
+                    <History className={`w-5 h-5 ${currentView === 'room_history' ? 'text-[#003060]' : 'text-white/60'}`} />
                     {isSidebarOpen && <span>รายงานห้องเรียน</span>}
                 </button>
 
                 <button
                     onClick={() => setCurrentView('school_dashboard')}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'school_dashboard' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'school_dashboard' ? 'bg-white text-gray-800 font-bold shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'} ${!isSidebarOpen && 'justify-center'}`}
                     title="ภาพรวมโรงเรียน"
                 >
-                    <Building2 className={`w-5 h-5 ${currentView === 'school_dashboard' ? 'text-brand-600' : 'text-gray-400'}`} />
+                    <Building2 className={`w-5 h-5 ${currentView === 'school_dashboard' ? 'text-[#003060]' : 'text-white/60'}`} />
                     {isSidebarOpen && <span>ภาพรวมโรงเรียน</span>}
                 </button>
             </div>
 
             {/* Desktop Collapse Button */}
-            <div className="hidden md:flex p-4 border-t border-gray-100 justify-end">
-                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors">
+            <div className="hidden md:flex p-4 border-t border-white/20 justify-end">
+                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white/10 rounded-lg text-white/60 hover:text-white transition-colors">
                     {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 </button>
             </div>
@@ -446,7 +446,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         <button
                             onClick={handleSaveClick}
                             disabled={loading || saving}
-                            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-bold shadow-sm hover:bg-brand-700 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-bold shadow-sm hover:opacity-90 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: '#003060' }}
                         >
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             <span className="hidden sm:inline">บันทึก</span>
@@ -651,7 +652,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                     <label className="text-xs font-bold text-gray-500 mb-1 block">ถึงวันที่</label>
                     <input type="date" value={historyEndDate} onChange={e => setHistoryEndDate(e.target.value)} className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none" />
                 </div>
-                <button onClick={fetchHistory} disabled={loadingHistory} className="bg-brand-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-brand-700 transition-colors shadow-sm flex items-center gap-2 h-[38px]">
+                <button onClick={fetchHistory} disabled={loadingHistory} className="text-white px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-colors shadow-sm flex items-center gap-2 h-[38px]" style={{ backgroundColor: '#003060' }}>
                     {loadingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <History className="w-4 h-4" />}
                     แสดงรายงาน
                 </button>
@@ -848,15 +849,15 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     return (
-        <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-white/50 flex h-[calc(100vh-120px)] overflow-hidden relative pb-16 md:pb-0">
+        <div className="rounded-3xl shadow-xl border border-white/20 flex h-[calc(100vh-120px)] overflow-hidden relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
 
             {/* Desktop Sidebar Only */}
-            <div className={`hidden md:flex flex-col border-r border-gray-200 bg-white transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+            <div className={`hidden md:flex flex-col border-r border-white/20 transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`} style={{ backgroundColor: '#003060' }}>
                 <SidebarContent />
             </div>
 
             {/* --- MAIN CONTENT AREA --- */}
-            <div className="flex-1 flex flex-col min-h-0 bg-gray-50 relative print:bg-white print:overflow-visible">
+            <div className="flex-1 flex flex-col min-h-0 relative print:bg-white print:overflow-visible bg-gradient-to-br from-blue-50 via-white to-indigo-50">
 
                 {/* HEADER */}
                 <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 z-20 no-print">
@@ -919,7 +920,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 {currentView === 'dashboard' && RenderDashboard()}
                 {currentView === 'room_history' && RenderRoomHistory()}
                 {currentView === 'school_dashboard' && (
-                    <div className="p-4 md:p-8 pb-20 overflow-y-auto h-full">
+                    <div className="p-4 md:p-8 pb-20 overflow-y-auto h-full bg-white">
                         <div className="max-w-7xl mx-auto">
                             <Dashboard embedded students={allStudents} />
                         </div>
@@ -990,7 +991,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             <button
                                 onClick={confirmSave}
                                 disabled={saving}
-                                className="flex-1 py-3 rounded-xl bg-brand-600 text-white font-bold shadow-lg hover:bg-brand-700 transition-all flex justify-center items-center gap-2"
+                                className="flex-1 py-3 rounded-xl text-white font-bold shadow-lg hover:opacity-90 transition-all flex justify-center items-center gap-2"
+                                style={{ backgroundColor: '#003060' }}
                             >
                                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                                 ยืนยันบันทึก

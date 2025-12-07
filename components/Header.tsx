@@ -24,7 +24,7 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
   }, []);
 
   return (
-    <header className="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b border-brand-200 transition-all no-print shadow-sm">
+    <header className="sticky top-0 z-50 border-b border-white/10 transition-all no-print shadow-lg" style={{ backgroundColor: '#003060' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-center py-3 md:h-20 gap-3 md:gap-0">
 
@@ -35,15 +35,15 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
                 <img src={SCHOOL_LOGO} alt="Logo" className="w-full h-full object-cover" />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-lg md:text-xl font-bold text-official-blue leading-tight tracking-tight">Smart Attendance (A.T)</h1>
-                <h2 className="text-xs md:text-sm font-medium text-brand-600">โรงเรียนประชาสามัคคี</h2>
+                <h1 className="text-lg md:text-xl font-bold text-white leading-tight tracking-tight">Smart Attendance (A.T)</h1>
+                <h2 className="text-xs md:text-sm font-medium text-white/70">โรงเรียนประชาสามัคคี</h2>
               </div>
             </div>
 
             {/* Time on Mobile (Top Right) */}
             <div className="md:hidden text-right">
-              <div className="text-sm font-bold text-official-blue font-mono">{currentTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</div>
-              <div className="text-[10px] text-brand-500">{currentTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</div>
+              <div className="text-sm font-bold text-white font-mono">{currentTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</div>
+              <div className="text-[10px] text-white/60">{currentTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</div>
             </div>
           </div>
 
@@ -51,9 +51,9 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
 
             {/* Time on Desktop */}
-            <div className="hidden md:flex flex-col items-end text-right mr-4 border-r border-brand-100 pr-4 py-1">
-              <span className="text-xs font-medium text-brand-500 uppercase tracking-wide">{currentTime.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: '2-digit' })}</span>
-              <span className="text-lg font-bold text-brand-800 font-mono leading-none">{currentTime.toLocaleTimeString('th-TH')}</span>
+            <div className="hidden md:flex flex-col items-end text-right mr-4 border-r border-white/20 pr-4 py-1">
+              <span className="text-xs font-medium text-white/70 uppercase tracking-wide">{currentTime.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: '2-digit' })}</span>
+              <span className="text-lg font-bold text-white font-mono leading-none">{currentTime.toLocaleTimeString('th-TH')}</span>
             </div>
 
             {!currentUser ? (
@@ -83,11 +83,11 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-brand-50 md:bg-transparent p-1 md:p-0 rounded-lg md:rounded-none border md:border-none border-brand-100">
+              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-white/10 md:bg-transparent p-1 md:p-0 rounded-lg md:rounded-none border md:border-none border-white/20">
                 {onRefresh && (
                   <button
                     onClick={onRefresh}
-                    className="p-2 text-brand-400 hover:text-brand-600 hover:bg-brand-100 rounded-lg transition-all"
+                    className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
                     title="อัปเดตข้อมูล"
                   >
                     <RefreshCw className="w-5 h-5" />
@@ -98,13 +98,13 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
                     {currentUser.role === Role.ADMIN ? <UserCog className="w-5 h-5" /> : <GraduationCap className="w-5 h-5" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-brand-800 leading-tight">{currentUser.name}</span>
-                    <span className="text-[10px] text-brand-600 leading-tight">{currentUser.role === Role.ADMIN ? 'ผู้ดูแลระบบ' : 'คุณครูประจำชั้น'}</span>
+                    <span className="text-xs font-bold text-white leading-tight">{currentUser.name}</span>
+                    <span className="text-[10px] text-white/70 leading-tight">{currentUser.role === Role.ADMIN ? 'ผู้ดูแลระบบ' : 'คุณครูประจำชั้น'}</span>
                   </div>
                 </div>
                 <button
                   onClick={onLogout}
-                  className="p-2 text-brand-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                  className="p-2 text-white/70 hover:text-red-400 hover:bg-white/10 rounded-lg transition-all"
                   title="ออกจากระบบ"
                 >
                   <LogOut className="w-5 h-5" />

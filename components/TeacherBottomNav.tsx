@@ -30,7 +30,7 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                     {/* ภาพรวม */}
                     <button
                         onClick={() => onViewChange('school_dashboard')}
-                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'school_dashboard' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'school_dashboard' ? 'text-white bg-[#003060]' : 'text-gray-400'}`}
                     >
                         <Building2 className={`w-5 h-5 transition-transform ${currentView === 'school_dashboard' ? 'scale-110' : ''}`} />
                         <span className="text-[10px] font-medium">ภาพรวม</span>
@@ -39,7 +39,7 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                     {/* สรุป */}
                     <button
                         onClick={() => onViewChange('dashboard')}
-                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'dashboard' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'dashboard' ? 'text-white bg-[#003060]' : 'text-gray-400'}`}
                     >
                         <LayoutDashboard className={`w-5 h-5 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} />
                         <span className="text-[10px] font-medium">สรุป</span>
@@ -53,8 +53,8 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                 w-14 h-14 rounded-full flex items-center justify-center
                 shadow-lg transition-all duration-300 ease-out
                 ${currentView === 'check'
-                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600 scale-105 ring-2 ring-emerald-300 ring-offset-2'
-                                    : 'bg-gradient-to-br from-emerald-500 to-teal-600 hover:scale-105'
+                                    ? 'bg-[#003060] scale-105 ring-2 ring-[#055C9D] ring-offset-2'
+                                    : 'bg-[#003060] hover:scale-105'
                                 }
               `}
                         >
@@ -65,7 +65,7 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                     {/* รายงาน */}
                     <button
                         onClick={() => onViewChange('room_history')}
-                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'room_history' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${currentView === 'room_history' ? 'text-white bg-[#003060]' : 'text-gray-400'}`}
                     >
                         <History className={`w-5 h-5 transition-transform ${currentView === 'room_history' ? 'scale-110' : ''}`} />
                         <span className="text-[10px] font-medium">รายงาน</span>
@@ -75,7 +75,7 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                     {onBackToAdmin ? (
                         <button
                             onClick={onBackToAdmin}
-                            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] text-indigo-500 active:bg-indigo-50"
+                            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] text-[#003060] active:bg-[#68BBE3]/20"
                         >
                             <ArrowLeft className="w-5 h-5" />
                             <span className="text-[10px] font-medium">กลับ</span>

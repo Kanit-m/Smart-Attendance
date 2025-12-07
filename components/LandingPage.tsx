@@ -115,7 +115,7 @@ export function LandingPage({ onGoToDashboard, onLoginAdmin, onLoginTeacher }: L
                 }
 
                 /* Button color variants using CSS variables */
-                .fancy-button-blue { --btn-color: #3b82f6; }
+                .fancy-button-blue { --btn-color: #055C9D; }
                 .fancy-button-red { --btn-color: #ef4444; }
                 .fancy-button-green { --btn-color: #22c55e; }
 
