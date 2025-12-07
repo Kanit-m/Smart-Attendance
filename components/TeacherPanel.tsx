@@ -481,10 +481,25 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         const config = STATUS_CONFIG.find(c => c.status === status) || STATUS_CONFIG[0];
                         const isSelected = selectedStudentIds.has(student.id);
 
+                        // Map status colors to RGB for glow effect
+                        const getGlowRgb = (colorClass: string): string => {
+                            if (colorClass.includes('emerald')) return '16, 185, 129';
+                            if (colorClass.includes('yellow')) return '234, 179, 8';
+                            if (colorClass.includes('blue')) return '59, 130, 246';
+                            if (colorClass.includes('purple')) return '168, 85, 247';
+                            if (colorClass.includes('rose')) return '244, 63, 94';
+                            return '100, 100, 100';
+                        };
+                        const glowRgb = getGlowRgb(config.color);
+
                         return (
                             <div
                                 key={student.id}
-                                className={`bg-white rounded-xl border transition-all duration-200 ${isSelected ? 'border-brand-400 ring-1 ring-brand-100 shadow-md' : 'border-gray-200 shadow-sm hover:shadow-md'}`}
+                                className={`bg-white rounded-xl transition-all duration-200 ${isSelected ? 'ring-2 ring-brand-300' : ''}`}
+                                style={{
+                                    border: `2px solid rgb(${glowRgb})`,
+                                    boxShadow: `0 0 2px rgba(${glowRgb}, 1), 0 0 6px rgba(${glowRgb}, 0.25), 0 1px 3px rgba(0,0,0,0.08)`
+                                }}
                             >
                                 <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     {/* Info Area */}
@@ -841,7 +856,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* --- MAIN CONTENT AREA --- */}
-            <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 relative print:bg-white print:overflow-visible">
+            <div className="flex-1 flex flex-col min-h-0 bg-gray-50 relative print:bg-white print:overflow-visible">
 
                 {/* HEADER */}
                 <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 z-20 no-print">

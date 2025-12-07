@@ -8,7 +8,7 @@ import { PrintReportPage } from './components/PrintReportPage';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LandingPage } from './components/LandingPage';
 import { BottomNav } from './components/BottomNav';
-import { Role, AppUser, Student, StudentStatus } from './types';
+import { Role, AppUser, Student } from './types';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
@@ -24,7 +24,22 @@ function App() {
     }
   }, []);
 
-  const [view, setView] = useState<'landing' | 'dashboard' | 'admin' | 'teacher'>('landing');
+  // Restore view from localStorage on mount
+  const getSavedView = () => {
+    const saved = localStorage.getItem('app_view');
+    if (saved && ['landing', 'dashboard', 'admin', 'teacher'].includes(saved)) {
+      return saved as 'landing' | 'dashboard' | 'admin' | 'teacher';
+    }
+    return 'landing';
+  };
+
+  const [view, setViewState] = useState<'landing' | 'dashboard' | 'admin' | 'teacher'>(getSavedView);
+
+  // Save view to localStorage whenever it changes
+  const setView = (newView: 'landing' | 'dashboard' | 'admin' | 'teacher') => {
+    localStorage.setItem('app_view', newView);
+    setViewState(newView);
+  };
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showTeacherLogin, setShowTeacherLogin] = useState(false);
@@ -34,13 +49,20 @@ function App() {
   const [showContent, setShowContent] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
 
-  // Minimum loading time to show the loading screen (5 seconds)
+  // Check if returning user (has saved session)
+  const hasSession = localStorage.getItem('app_view') && localStorage.getItem('app_view') !== 'landing';
+
+  // Minimum loading time - skip if returning user
   useEffect(() => {
+    if (hasSession) {
+      setIsMinLoadingComplete(true);
+      return;
+    }
     const timer = setTimeout(() => {
       setIsMinLoadingComplete(true);
     }, 5000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [hasSession]);
 
   // Handle transition from loading to content
   useEffect(() => {
@@ -241,7 +263,7 @@ function App() {
         onRefresh={() => fetchStudents(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'teacher' ? 'overflow-hidden h-[calc(100vh-80px)] md:overflow-visible md:h-auto' : ''}`}>
         {view === 'dashboard' && <Dashboard students={students} />}
 
         {view === 'admin' && currentUser?.role === Role.ADMIN && (
@@ -255,8 +277,8 @@ function App() {
         )}
 
         {view === 'teacher' && (
-          <div className="animate-fade-in">
-            <div className="mb-6 print:hidden">
+          <div className="animate-fade-in h-full md:h-auto">
+            <div className="mb-6 print:hidden hidden md:block">
               <h2 className="text-2xl font-bold text-gray-800">ระบบครู</h2>
               <p className="text-gray-500">บันทึกการมาเรียนและรายงานสถิติ</p>
             </div>

@@ -76,6 +76,16 @@
       color: #111827;
       /* Gray 900 - Near Black */
       -webkit-tap-highlight-color: transparent;
+      /* Prevent pull-to-refresh on mobile */
+      overscroll-behavior: none;
+      overscroll-behavior-y: contain;
+    }
+
+    /* Prevent accidental refresh on iOS */
+    html,
+    body {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     /* Force date inputs to be light theme so icons are dark/visible on white bg */
@@ -239,6 +249,7 @@
         opacity: 0;
         transform: translateY(100%);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -247,6 +258,21 @@
 
     .animate-slide-up-nav {
       animation: slideUpNav 0.3s ease-out forwards;
+    }
+
+    /* Neon Glow Pulse Animation */
+    @keyframes neonPulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        filter: brightness(1);
+      }
+
+      50% {
+        opacity: 0.85;
+        filter: brightness(1.15);
+      }
     }
   </style>
   <script type="importmap">
