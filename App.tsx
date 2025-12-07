@@ -7,7 +7,8 @@ import { LoginModal } from './components/LoginModal';
 import { PrintReportPage } from './components/PrintReportPage';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LandingPage } from './components/LandingPage';
-import { Role, AppUser, Student } from './types';
+import { BottomNav } from './components/BottomNav';
+import { Role, AppUser, Student, StudentStatus } from './types';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
@@ -231,7 +232,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 font-sans">
+    <div className="min-h-screen flex flex-col bg-gray-50 font-sans pb-20 md:pb-0">
       <Header
         currentUser={currentUser}
         onLoginAdmin={() => setShowAdminLogin(true)}
@@ -249,7 +250,7 @@ function App() {
               <h2 className="text-2xl font-bold text-gray-800">ระบบผู้ดูแล</h2>
               <p className="text-gray-500">จัดการข้อมูลนักเรียน ครู และการตั้งค่าระบบ</p>
             </div>
-            <AdminPanel onSwitchToTeacherView={() => setView('teacher')} />
+            <AdminPanel onSwitchToTeacherView={() => setView('teacher')} onLogout={handleLogout} />
           </div>
         )}
 
@@ -261,8 +262,9 @@ function App() {
             </div>
             <TeacherPanel
               currentUser={currentUser!}
-              allStudents={students}
+              allStudents={students.filter(s => s.status !== StudentStatus.WITHDRAWN)}
               onBackToAdmin={currentUser?.role === Role.ADMIN ? () => setView('admin') : undefined}
+              onLogout={handleLogout}
             />
           </div>
         )}
@@ -298,7 +300,17 @@ function App() {
         onLogin={(u, p) => handleLogin(u, p, Role.TEACHER)}
       />
 
-      <footer className="bg-white border-t py-6 mt-auto no-print">
+      {/* Mobile Bottom Navigation - Hidden when Admin/Teacher have their own nav */}
+      {view !== 'admin' && view !== 'teacher' && (
+        <BottomNav
+          currentView={view}
+          onNavigate={(newView) => setView(newView)}
+          isLoggedIn={!!currentUser}
+          userRole={currentUser?.role === Role.ADMIN ? 'admin' : currentUser?.role === Role.TEACHER ? 'teacher' : null}
+        />
+      )}
+
+      <footer className="bg-white border-t py-6 mt-auto no-print hidden md:block">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-400">
           &copy; {new Date().getFullYear()} โรงเรียนประชาสามัคคี. All rights reserved.
         </div>

@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Save, Loader2, LayoutDashboard, ArrowLeft,
     Calendar as CalendarIcon,
     UserCheck, UserX, Clock, Thermometer, Calendar,
-    CheckCircle2, CheckSquare, Square, X, Menu,
+    CheckCircle2, CheckSquare, Square, X,
     ClipboardList, ChevronLeft, ChevronRight, PieChart, Contact,
     Building2, RotateCcw, History, Activity
 } from 'lucide-react';
@@ -13,16 +12,17 @@ import {
 } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceStatus, Holiday, Role, Gender, AttendanceRecord } from '../types';
-import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AttendanceHeatmap } from './AttendanceHeatmap';
 import { StudentHistoryCard } from './StudentHistoryCard';
+import { TeacherBottomNav } from './TeacherBottomNav';
 
 interface TeacherPanelProps {
     currentUser: { name: string; role: string; assignedClass?: string };
     allStudents?: Student[];
     onBackToAdmin?: () => void;
+    onLogout: () => void;
 }
 
 const GRADE_OPTIONS = [
@@ -39,11 +39,10 @@ const STATUS_CONFIG = [
     { status: AttendanceStatus.ABSENT, label: 'ขาด', color: 'bg-rose-500 hover:bg-rose-600', text: 'text-rose-600', bg: 'bg-rose-100', icon: UserX },
 ];
 
-export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin }) => {
+export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout }) => {
     // Navigation & View State
     const [currentView, setCurrentView] = useState<'check' | 'dashboard' | 'school_dashboard' | 'room_history'>('check');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Data State
     const [students, setStudents] = useState<Student[]>([]);
@@ -94,7 +93,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         setLoading(true);
         setHistoryData(null); // Reset history when class changes
 
-        // Filter from cached students instead of fetching
+        // Filter from cached students (already excludes withdrawn students from App.tsx)
         const data = allStudents.filter(s => s.grade === selectedClass);
         data.sort((a, b) => (a.number || 0) - (b.number || 0));
         setStudents(data);
@@ -350,7 +349,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
             <div className="flex-1 py-4 space-y-1 px-2">
                 <button
-                    onClick={() => { setCurrentView('check'); setIsMobileMenuOpen(false); }}
+                    onClick={() => setCurrentView('check')}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'check' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
                     title="เช็คชื่อ"
                 >
@@ -359,7 +358,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 </button>
 
                 <button
-                    onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }}
+                    onClick={() => setCurrentView('dashboard')}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'dashboard' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
                     title="แดชบอร์ด"
                 >
@@ -370,7 +369,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 <div className="border-t border-gray-100 my-2 mx-2"></div>
 
                 <button
-                    onClick={() => { setCurrentView('room_history'); setIsMobileMenuOpen(false); }}
+                    onClick={() => setCurrentView('room_history')}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'room_history' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
                     title="รายงานห้องเรียน"
                 >
@@ -379,7 +378,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 </button>
 
                 <button
-                    onClick={() => { setCurrentView('school_dashboard'); setIsMobileMenuOpen(false); }}
+                    onClick={() => setCurrentView('school_dashboard')}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${currentView === 'school_dashboard' ? 'bg-brand-50 text-brand-700 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'} ${!isSidebarOpen && 'justify-center'}`}
                     title="ภาพรวมโรงเรียน"
                 >
@@ -827,21 +826,12 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     return (
-        <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-white/50 flex h-[calc(100vh-120px)] overflow-hidden relative">
+        <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-white/50 flex h-[calc(100vh-120px)] overflow-hidden relative pb-16 md:pb-0">
 
-            {/* --- SIDEBAR (DESKTOP & MOBILE) --- */}
-
-            {/* Mobile Overlay Sidebar */}
-            <div className={`fixed inset-0 bg-black/50 z-40 transition-opacity md:hidden no-print ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className={`fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform md:hidden shadow-2xl no-print ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <SidebarContent />
-            </div>
-
-            {/* Desktop Sidebar */}
+            {/* Desktop Sidebar Only */}
             <div className={`hidden md:flex flex-col border-r border-gray-200 bg-white transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
                 <SidebarContent />
             </div>
-
 
             {/* --- MAIN CONTENT AREA --- */}
             <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 relative print:bg-white print:overflow-visible">
@@ -849,13 +839,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 {/* HEADER */}
                 <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 z-20 no-print">
                     <div className="flex items-center gap-3 w-full md:w-auto">
-                        {/* Hamburger Button */}
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-                            <Menu className="w-6 h-6" />
-                        </button>
-
+                        {/* Back to Admin button - only on desktop */}
                         {onBackToAdmin && (
-                            <button onClick={onBackToAdmin} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors" title="กลับหน้า Admin">
+                            <button onClick={onBackToAdmin} className="hidden md:block p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors" title="กลับหน้า Admin">
                                 <ArrowLeft className="w-6 h-6" />
                             </button>
                         )}
@@ -1001,6 +987,14 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 message="คุณต้องการยกเลิกการแก้ไขทั้งหมดและโหลดข้อมูลล่าสุดจากฐานข้อมูลใช่หรือไม่? การแก้ไขที่ยังไม่บันทึกจะหายไป"
                 isDangerous={true}
                 isLoading={loading}
+            />
+
+            {/* Mobile Bottom Navigation */}
+            <TeacherBottomNav
+                currentView={currentView}
+                onViewChange={setCurrentView}
+                onLogout={onLogout}
+                onBackToAdmin={onBackToAdmin}
             />
         </div>
     );

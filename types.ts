@@ -19,6 +19,11 @@ export enum AttendanceStatus {
   HOLIDAY = 'วันหยุด'
 }
 
+export enum StudentStatus {
+  ACTIVE = 'active',
+  WITHDRAWN = 'withdrawn'
+}
+
 export interface Student {
   id: string; // Firebase Document ID
   studentId: string; // รหัสนักเรียน
@@ -26,6 +31,8 @@ export interface Student {
   name: string;
   grade: string; // ชั้น
   gender: Gender;
+  status?: StudentStatus; // สถานะนักเรียน (default: ACTIVE)
+  withdrawnAt?: number; // timestamp ที่ลาออก
 }
 
 // Unified User Interface for Firestore 'users' collection

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
 import { db } from '../firebase';
-import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday } from '../types';
+import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday, StudentStatus } from '../types';
 import { DailyReport } from './DailyReport';
 
 interface DashboardProps {
@@ -113,9 +113,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         }
     };
 
+    // Filter students based on currentDate - include students who hadn't withdrawn by that date
+    const activeStudents = useMemo(() => {
+        const viewingTimestamp = new Date(currentDate).getTime() + (24 * 60 * 60 * 1000); // End of viewing day
+        return students.filter(s => {
+            // Include if never withdrawn
+            if (s.status !== StudentStatus.WITHDRAWN || !s.withdrawnAt) return true;
+            // Include if withdrew AFTER the viewing date
+            return s.withdrawnAt > viewingTimestamp;
+        });
+    }, [students, currentDate]);
+
     // Memoize expensive grade statistics calculation
     const allStats = useMemo((): GradeStats[] => {
-        const uniqueGrades = Array.from(new Set(students.map(s => s.grade))) as string[];
+        const uniqueGrades = Array.from(new Set(activeStudents.map(s => s.grade))) as string[];
         // Custom sort: Anuban first, then Prathom
         const grades = uniqueGrades.sort((a, b) => {
             const isKA = a.includes('อนุบาล');
@@ -130,7 +141,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         });
 
         return grades.map(grade => {
-            const studentsInGrade = students.filter(s => s.grade === grade);
+            const studentsInGrade = activeStudents.filter(s => s.grade === grade);
             const male = studentsInGrade.filter(s => s.gender === Gender.MALE).length;
             const female = studentsInGrade.filter(s => s.gender === Gender.FEMALE).length;
 
@@ -166,7 +177,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 isSubmitted: presentCount + absentCount > 0
             };
         });
-    }, [students, attendances]);
+    }, [activeStudents, attendances]);
 
     // Memoize filtered stats for Kindergarten and Primary
     const kStats = useMemo(() => allStats.filter(s => s.grade.includes('อนุบาล')), [allStats]);
@@ -207,10 +218,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
     // Memoize student totals
     const { totalStudents, totalMale, totalFemale } = useMemo(() => ({
-        totalStudents: students.length,
-        totalMale: students.filter(s => s.gender === Gender.MALE).length,
-        totalFemale: students.filter(s => s.gender === Gender.FEMALE).length
-    }), [students]);
+        totalStudents: activeStudents.length,
+        totalMale: activeStudents.filter(s => s.gender === Gender.MALE).length,
+        totalFemale: activeStudents.filter(s => s.gender === Gender.FEMALE).length
+    }), [activeStudents]);
 
     // Memoize attendance totals
     const { totalAbsent, totalPresent, percentPresent } = useMemo(() => {
@@ -219,9 +230,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         return {
             totalAbsent: absentCount,
             totalPresent: presentCount,
-            percentPresent: students.length > 0 ? ((presentCount / students.length) * 100).toFixed(1) : '0.0'
+            percentPresent: activeStudents.length > 0 ? ((presentCount / activeStudents.length) * 100).toFixed(1) : '0.0'
         };
-    }, [attendances, students.length]);
+    }, [attendances, activeStudents.length]);
 
     // Swipe Handlers - memoized to prevent recreation
     const handleTouchStart = useCallback((e: React.TouchEvent) => setTouchStart(e.targetTouches[0].clientX), []);

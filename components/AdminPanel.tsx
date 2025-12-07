@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   UserPlus, Users, Upload, Trash2, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
-  GraduationCap, Pencil, Edit2
+  GraduationCap, Pencil, Edit2, UserMinus, RotateCcw
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -12,13 +12,15 @@ import {
 import * as firebaseApp from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, firebaseConfig } from '../firebase';
-import { Student, TeacherForm, Gender, Role, AppUser, Holiday } from '../types';
+import { Student, TeacherForm, Gender, Role, AppUser, Holiday, StudentStatus } from '../types';
 import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
+import { AdminBottomNav } from './AdminBottomNav';
 
 interface AdminPanelProps {
   onSwitchToTeacherView: () => void;
+  onLogout: () => void;
 }
 
 const GRADE_OPTIONS = [
@@ -39,7 +41,7 @@ const BTN_SECONDARY = "border border-gray-300 bg-white text-black px-4 py-2 roun
 const BTN_SUCCESS = "bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center";
 const BTN_DANGER = "bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed";
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<AppUser[]>([]);
@@ -144,7 +146,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
     if (!newStudent.studentId) return showToast('ระบุรหัสนักเรียน', 'error');
     setLoadingAction(true);
     try {
-      await setDoc(doc(db, 'students', newStudent.studentId), newStudent);
+      await setDoc(doc(db, 'students', newStudent.studentId), { ...newStudent, status: StudentStatus.ACTIVE });
       showToast('เพิ่มสำเร็จ', 'success');
       setNewStudent({ studentId: '', number: 0, name: '', grade: GRADE_OPTIONS[0], gender: Gender.MALE });
       if (activeTab === 1 || activeTab === 4) fetchStudents();
@@ -175,7 +177,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
               number: parseInt(cols[0]) || 0, studentId: sid,
               name: cols[2]?.trim() || 'ไม่ระบุชื่อ',
               grade: (cols[3] || GRADE_OPTIONS[0]).trim(),
-              gender: (cols[4] || '').trim() === 'ชาย' ? Gender.MALE : Gender.FEMALE
+              gender: (cols[4] || '').trim() === 'ชาย' ? Gender.MALE : Gender.FEMALE,
+              status: StudentStatus.ACTIVE
             });
             count++;
           }
@@ -196,6 +199,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         setLoadingAction(true);
         try { await deleteDoc(doc(db, 'students', id)); setStudents(prev => prev.filter(s => s.id !== id)); showToast('ลบเรียบร้อย', 'success'); setConfirmModal(prev => ({ ...prev, isOpen: false })); }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); } finally { setLoadingAction(false); }
+      }
+    });
+  };
+
+  const clickWithdrawStudent = (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true, title: 'นักเรียนลาออก', message: `ยืนยันว่า "${name}" ลาออกจากโรงเรียนใช่หรือไม่?`, isDangerous: false,
+      action: async () => {
+        setLoadingAction(true);
+        try {
+          await updateDoc(doc(db, 'students', id), {
+            status: StudentStatus.WITHDRAWN,
+            withdrawnAt: Date.now()
+          });
+          setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.WITHDRAWN, withdrawnAt: Date.now() } : s));
+          showToast(`${name} ถูกบันทึกเป็น "ลาออก"`, 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+        catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
+        finally { setLoadingAction(false); }
+      }
+    });
+  };
+
+  const clickReactivateStudent = (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true, title: 'คืนสถานะนักเรียน', message: `ยืนยันคืนสถานะ "${name}" กลับมาเป็นนักเรียนปกติ?`, isDangerous: false,
+      action: async () => {
+        setLoadingAction(true);
+        try {
+          await updateDoc(doc(db, 'students', id), {
+            status: StudentStatus.ACTIVE,
+            withdrawnAt: null
+          });
+          setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.ACTIVE, withdrawnAt: undefined } : s));
+          showToast(`${name} กลับมาเป็นนักเรียนปกติแล้ว`, 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+        catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
+        finally { setLoadingAction(false); }
       }
     });
   };
@@ -239,7 +282,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
     try {
       await updateDoc(doc(db, 'students', editingStudent.id), {
         number: Number(editingStudent.number), studentId: editingStudent.studentId,
-        name: editingStudent.name, grade: editingStudent.grade, gender: editingStudent.gender
+        name: editingStudent.name, grade: editingStudent.grade, gender: editingStudent.gender,
+        status: editingStudent.status || StudentStatus.ACTIVE,
+        withdrawnAt: editingStudent.withdrawnAt || null
       });
       setStudents(prev => prev.map(s => s.id === editingStudent.id ? editingStudent : s));
       showToast('แก้ไขเรียบร้อย', 'success'); setEditingStudent(null);
@@ -354,10 +399,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
   ];
 
   return (
-    <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh]">
+    <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0">
 
-      {/* Responsive Sidebar/Menu */}
-      <div className="w-full md:w-64 bg-white/50 border-b md:border-b-0 md:border-r border-gray-200 flex flex-row md:flex-col shrink-0 overflow-x-auto no-scrollbar sticky top-0 z-20">
+      {/* Sidebar - Hidden on mobile */}
+      <div className="hidden md:flex w-64 bg-white/50 border-r border-gray-200 flex-col shrink-0">
         <div className="flex md:flex-col p-2 md:p-4 gap-1 md:gap-2 min-w-max md:min-w-0 w-full">
           {tabs.map((tab) => (
             <button
@@ -373,25 +418,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
             </button>
           ))}
         </div>
-
-        <div className="hidden md:block mt-auto p-4 border-t border-gray-200">
-          <button
-            onClick={onSwitchToTeacherView}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl border border-emerald-200 text-sm font-bold transition-colors"
-          >
-            <GraduationCap className="w-4 h-4" /> มุมมองครู
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile View Teacher Button */}
-      <div className="md:hidden px-4 py-2 bg-white/80 border-b border-gray-200">
-        <button
-          onClick={onSwitchToTeacherView}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 text-sm font-bold active:scale-95 transition-transform"
-        >
-          <GraduationCap className="w-4 h-4" /> สลับไปยังมุมมองครู
-        </button>
       </div>
 
       {/* Content Area */}
@@ -401,7 +427,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         {activeTab === 1 && (
           <div className="space-y-4 animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-bold text-black">รายชื่อนักเรียนทั้งหมด ({students.length})</h3>
+              <h3 className="text-lg font-bold text-black">รายชื่อนักเรียนทั้งหมด ({students.filter(s => s.status !== StudentStatus.WITHDRAWN).length})</h3>
               <select className="w-full sm:w-auto border border-gray-300 rounded-lg text-sm px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500 bg-white text-black"
                 onChange={(e) => setFilterGrade(e.target.value)} value={filterGrade}>
                 <option value="">ทุกระดับชั้น</option>
@@ -414,7 +440,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
                   <tr><th className="px-4 py-3 w-20 text-center">เลขที่</th><th className="px-4 py-3">ชื่อ-นามสกุล</th><th className="px-4 py-3">ชั้น</th><th className="px-4 py-3 text-center">เพศ</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {students.filter(s => !filterGrade || s.grade === filterGrade).map((s) => (
+                  {students.filter(s => (!filterGrade || s.grade === filterGrade) && s.status !== StudentStatus.WITHDRAWN).map((s) => (
                     <tr key={s.id} className="hover:bg-blue-50/50 transition-colors">
                       <td className="px-4 py-3 text-center font-mono text-gray-500 font-medium">{s.number}</td>
                       <td className="px-4 py-3 font-bold text-black">{s.name}</td>
@@ -572,9 +598,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
               </div>
             </div>
 
+            {/* Active Students Table */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                <div className="font-bold text-black">รายชื่อนักเรียน</div>
+                <div className="font-bold text-black">รายชื่อนักเรียน ({students.filter(s => s.status !== StudentStatus.WITHDRAWN).length} คน)</div>
                 <select
                   className="border border-gray-300 rounded-lg text-sm px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 bg-white text-black"
                   onChange={(e) => setFilterGrade(e.target.value)}
@@ -588,14 +615,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200"><tr><th className="p-4 w-16 text-center">#</th><th className="p-4">ชื่อ</th><th className="p-4">ชั้น</th><th className="p-4 text-right">จัดการ</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
-                    {students.filter(s => !filterGrade || s.grade === filterGrade).map(s => (
+                    {students.filter(s => (!filterGrade || s.grade === filterGrade) && s.status !== StudentStatus.WITHDRAWN).map(s => (
                       <tr key={s.id} className="hover:bg-gray-50">
                         <td className="p-4 text-center text-gray-400">{s.number}</td>
                         <td className="p-4 font-bold text-black">{s.name}</td>
                         <td className="p-4 text-black">{s.grade}</td>
-                        <td className="p-4 text-right flex justify-end gap-2">
-                          <button onClick={() => setEditingStudent(s)} className="text-brand-600 hover:bg-brand-50 p-2 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
-                          <button onClick={() => clickDeleteStudent(s.id, s.name)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        <td className="p-4 text-right flex justify-end gap-1">
+                          <button onClick={() => setEditingStudent(s)} className="text-brand-600 hover:bg-brand-50 p-2 rounded-lg transition-colors" title="แก้ไข"><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => clickWithdrawStudent(s.id, s.name)} className="text-orange-500 hover:bg-orange-50 p-2 rounded-lg transition-colors" title="ลาออก"><UserMinus className="w-4 h-4" /></button>
+                          <button onClick={() => clickDeleteStudent(s.id, s.name)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" title="ลบ"><Trash2 className="w-4 h-4" /></button>
                         </td>
                       </tr>
                     ))}
@@ -603,11 +631,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
                 </table>
               </div>
             </div>
+
+            {/* Withdrawn Students Section */}
+            {students.filter(s => s.status === StudentStatus.WITHDRAWN).length > 0 && (
+              <div className="bg-white rounded-2xl border border-orange-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-orange-100 flex justify-between items-center bg-orange-50">
+                  <div className="font-bold text-orange-700 flex items-center gap-2">
+                    <UserMinus className="w-5 h-5" />
+                    นักเรียนที่ลาออก ({students.filter(s => s.status === StudentStatus.WITHDRAWN).length} คน)
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-orange-50/50 text-xs uppercase text-orange-600 border-b border-orange-100"><tr><th className="p-4 w-16 text-center">#</th><th className="p-4">ชื่อ</th><th className="p-4">ชั้น</th><th className="p-4">วันที่ลาออก</th><th className="p-4 text-right">จัดการ</th></tr></thead>
+                    <tbody className="divide-y divide-orange-50">
+                      {students.filter(s => s.status === StudentStatus.WITHDRAWN).map(s => (
+                        <tr key={s.id} className="hover:bg-orange-50/50">
+                          <td className="p-4 text-center text-gray-400">{s.number}</td>
+                          <td className="p-4 font-bold text-gray-600">{s.name}</td>
+                          <td className="p-4 text-gray-500">{s.grade}</td>
+                          <td className="p-4 text-gray-500 text-sm">{s.withdrawnAt ? new Date(s.withdrawnAt).toLocaleDateString('th-TH') : '-'}</td>
+                          <td className="p-4 text-right flex justify-end gap-1">
+                            <button onClick={() => clickReactivateStudent(s.id, s.name)} className="text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg transition-colors" title="คืนสถานะ"><RotateCcw className="w-4 h-4" /></button>
+                            <button onClick={() => clickDeleteStudent(s.id, s.name)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" title="ลบถาวร"><Trash2 className="w-4 h-4" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 5 && (
           <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+
+            {/* Quick Actions */}
+            <button
+              onClick={onSwitchToTeacherView}
+              className="flex items-center justify-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl border border-emerald-200 transition-all active:scale-95 w-full"
+            >
+              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <span className="font-bold text-sm">สลับไปมุมมองครู</span>
+            </button>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
               <h3 className="font-bold mb-4 text-black flex items-center gap-2"><Calendar className="w-5 h-5 text-brand-600" /> จัดการวันหยุด</h3>
@@ -649,6 +719,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         )}
       </div>
 
+      {/* Mobile Bottom Navigation */}
+      <AdminBottomNav activeTab={activeTab} onTabChange={setActiveTab} onLogout={onLogout} />
+
       {/* Edit Student Modal */}
       {editingStudent && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
@@ -687,7 +760,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView })
         , document.body)}
 
       <ConfirmationModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} onConfirm={confirmModal.action} title={confirmModal.title} message={confirmModal.message} isDangerous={confirmModal.isDangerous} isLoading={loadingAction} />
-      {toast && <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-lg text-white z-[60] font-medium flex items-center gap-2 animate-slide-up ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>{toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />} {toast.message}</div>}
+      {toast && <div className={`fixed bottom-24 md:bottom-4 right-4 px-6 py-3 rounded-xl shadow-lg text-white z-[60] font-medium flex items-center gap-2 animate-slide-up ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>{toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />} {toast.message}</div>}
     </div>
   );
 };
