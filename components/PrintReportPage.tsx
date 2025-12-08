@@ -5,7 +5,7 @@ import { Student, AttendanceRecord } from '../types';
 import { mapStudentData } from '../utils';
 import { DailyReportPreview } from './DailyReportPreview';
 import { PrintLoading } from './PrintLoading';
-import { Printer, ArrowLeft, AlertTriangle, X } from 'lucide-react';
+import { Printer, ArrowLeft, AlertTriangle, X, RefreshCw } from 'lucide-react';
 
 export const PrintReportPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
@@ -39,7 +39,7 @@ export const PrintReportPage: React.FC = () => {
         setIsInitialized(true);
     }, []);
 
-    // Fetch Data when date changes (after initialization)
+    // Fetch Data when date changes (after initialization) - WITH CACHING
     useEffect(() => {
         // Don't fetch until URL params have been processed
         if (!isInitialized) {
@@ -51,17 +51,54 @@ export const PrintReportPage: React.FC = () => {
             const startTime = Date.now();
 
             try {
-                // 1. Fetch Students
-                const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
-                const studentsSnap = await getDocs(studentsQuery);
-                const studentsData = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
-                setStudents(studentsData);
+                // 1. Try to get Students from existing App cache first
+                const STUDENTS_CACHE_KEY = 'cached_students';
+                const cachedStudents = localStorage.getItem(STUDENTS_CACHE_KEY);
 
-                // 2. Fetch Attendance for the date
+                if (cachedStudents) {
+                    console.log('Using cached students data for PrintReportPage');
+                    setStudents(JSON.parse(cachedStudents));
+                } else {
+                    // Fall back to Firestore if no cache
+                    console.log('Fetching students from Firestore (no cache found)');
+                    const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
+                    const studentsSnap = await getDocs(studentsQuery);
+                    const studentsData = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+                    setStudents(studentsData);
+                }
+
+                // 2. Fetch Attendance for the date - WITH CACHING
+                const ATTENDANCE_CACHE_KEY = `cached_attendance_${date}`;
+                const ATTENDANCE_TIME_KEY = `cached_attendance_time_${date}`;
+                const ATTENDANCE_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+                const cachedAttendance = localStorage.getItem(ATTENDANCE_CACHE_KEY);
+                const cachedTime = localStorage.getItem(ATTENDANCE_TIME_KEY);
+                const now = Date.now();
+
+                if (cachedAttendance && cachedTime) {
+                    const age = now - parseInt(cachedTime);
+                    if (age < ATTENDANCE_CACHE_DURATION) {
+                        console.log(`Using cached attendance for ${date} (${(age / 1000 / 60).toFixed(1)} mins old)`);
+                        setAttendances(JSON.parse(cachedAttendance));
+                        return; // Skip Firestore fetch
+                    }
+                }
+
+                // Fetch fresh attendance data
+                console.log(`Fetching fresh attendance for ${date} from Firestore`);
                 const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', date));
                 const attendanceSnap = await getDocs(attendanceQuery);
                 const attendanceData = attendanceSnap.docs.map(doc => doc.data() as AttendanceRecord);
                 setAttendances(attendanceData);
+
+                // Save to cache
+                try {
+                    localStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(attendanceData));
+                    localStorage.setItem(ATTENDANCE_TIME_KEY, now.toString());
+                } catch (err) {
+                    console.error('Failed to save attendance cache', err);
+                }
 
             } catch (error) {
                 console.error("Error fetching report data:", error);
@@ -109,6 +146,53 @@ export const PrintReportPage: React.FC = () => {
         }
     };
 
+    // Refresh data - clear cache and fetch fresh data
+    const handleRefreshData = async () => {
+        setLoading(true);
+        const startTime = Date.now();
+
+        try {
+            // Clear attendance cache for current date
+            const ATTENDANCE_CACHE_KEY = `cached_attendance_${date}`;
+            const ATTENDANCE_TIME_KEY = `cached_attendance_time_${date}`;
+            localStorage.removeItem(ATTENDANCE_CACHE_KEY);
+            localStorage.removeItem(ATTENDANCE_TIME_KEY);
+            console.log(`Cleared attendance cache for ${date}`);
+
+            // Fetch fresh students data (from main App cache)
+            const STUDENTS_CACHE_KEY = 'cached_students';
+            const cachedStudents = localStorage.getItem(STUDENTS_CACHE_KEY);
+            if (cachedStudents) {
+                setStudents(JSON.parse(cachedStudents));
+            } else {
+                const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
+                const studentsSnap = await getDocs(studentsQuery);
+                const studentsData = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+                setStudents(studentsData);
+            }
+
+            // Fetch fresh attendance data
+            console.log(`Refreshing attendance for ${date} from Firestore`);
+            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', date));
+            const attendanceSnap = await getDocs(attendanceQuery);
+            const attendanceData = attendanceSnap.docs.map(doc => doc.data() as AttendanceRecord);
+            setAttendances(attendanceData);
+
+            // Save new data to cache
+            const now = Date.now();
+            localStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(attendanceData));
+            localStorage.setItem(ATTENDANCE_TIME_KEY, now.toString());
+
+        } catch (error) {
+            console.error("Error refreshing data:", error);
+        } finally {
+            const elapsedTime = Date.now() - startTime;
+            const minLoadingTime = 1000; // Shorter loading for refresh
+            const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+            setTimeout(() => setLoading(false), remainingTime);
+        }
+    };
+
     if (loading) {
         return <PrintLoading message="กำลังโหลดข้อมูล" />;
     }
@@ -132,12 +216,21 @@ export const PrintReportPage: React.FC = () => {
                     {/* Date Selection */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">วันที่รายงาน</label>
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="w-full border rounded-md p-2"
-                        />
+                        <div className="flex gap-2">
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="flex-1 border rounded-md p-2"
+                            />
+                            <button
+                                onClick={handleRefreshData}
+                                className="px-3 py-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
+                                title="รีเฟรชข้อมูล"
+                            >
+                                <RefreshCw className="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
 
                     <hr />
