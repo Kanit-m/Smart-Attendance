@@ -8,188 +8,137 @@ import { PrintLoading } from './PrintLoading';
 import { Printer, ArrowLeft, AlertTriangle, X, RefreshCw } from 'lucide-react';
 
 export const PrintReportPage: React.FC = () => {
+    // Cache Configuration
+    const STUDENTS_CACHE_KEY = 'cached_students';
+    const getAttendanceCacheKey = (d: string) => `cached_attendance_${d}`;
+    const getAttendanceTimeKey = (d: string) => `cached_attendance_time_${d}`;
+    const ATTENDANCE_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
     const [students, setStudents] = useState<Student[]>([]);
     const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-
-    // Duty Log State
     const [dutyLog, setDutyLog] = useState({
-        topic1: '',
-        topic2: '',
-        afternoonTopic: '',
-        otherTopic: '',
-        teacherName: ''
+        topic1: '', topic2: '', afternoonTopic: '', otherTopic: '', teacherName: ''
     });
-
-    // Track if initial URL parse is complete
     const [isInitialized, setIsInitialized] = useState(false);
-
-    // Warning Modal State
     const [showWarningModal, setShowWarningModal] = useState(false);
+
+    // Helper: Load students from cache or Firestore
+    const loadStudents = async () => {
+        const cached = localStorage.getItem(STUDENTS_CACHE_KEY);
+        if (cached) {
+            return JSON.parse(cached) as Student[];
+        }
+        const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => mapStudentData(doc.id, doc.data()));
+    };
+
+    // Helper: Load attendance from cache or Firestore
+    const loadAttendance = async (targetDate: string, forceRefresh = false) => {
+        const cacheKey = getAttendanceCacheKey(targetDate);
+        const timeKey = getAttendanceTimeKey(targetDate);
+        const now = Date.now();
+
+        if (!forceRefresh) {
+            const cached = localStorage.getItem(cacheKey);
+            const cachedTime = localStorage.getItem(timeKey);
+            if (cached && cachedTime && (now - parseInt(cachedTime)) < ATTENDANCE_CACHE_DURATION) {
+                return JSON.parse(cached) as AttendanceRecord[];
+            }
+        }
+
+        // Fetch fresh data
+        const q = query(collection(db, 'attendance'), where('date', '==', targetDate));
+        const snap = await getDocs(q);
+        const data = snap.docs.map(doc => doc.data() as AttendanceRecord);
+
+        // Save to cache
+        try {
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+            localStorage.setItem(timeKey, now.toString());
+        } catch { /* ignore cache errors */ }
+
+        return data;
+    };
 
     // Get date from URL on initial load
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const dateParam = params.get('date');
-        if (dateParam) {
-            setDate(dateParam);
-        }
-        // Mark as initialized after setting date from URL
+        if (dateParam) setDate(dateParam);
         setIsInitialized(true);
     }, []);
 
-    // Fetch Data when date changes (after initialization) - WITH CACHING
+    // Fetch Data when date changes
     useEffect(() => {
-        // Don't fetch until URL params have been processed
-        if (!isInitialized) {
-            return;
-        }
+        if (!isInitialized) return;
 
         const fetchData = async () => {
             setLoading(true);
             const startTime = Date.now();
 
             try {
-                // 1. Try to get Students from existing App cache first
-                const STUDENTS_CACHE_KEY = 'cached_students';
-                const cachedStudents = localStorage.getItem(STUDENTS_CACHE_KEY);
-
-                if (cachedStudents) {
-                    console.log('Using cached students data for PrintReportPage');
-                    setStudents(JSON.parse(cachedStudents));
-                } else {
-                    // Fall back to Firestore if no cache
-                    console.log('Fetching students from Firestore (no cache found)');
-                    const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
-                    const studentsSnap = await getDocs(studentsQuery);
-                    const studentsData = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
-                    setStudents(studentsData);
-                }
-
-                // 2. Fetch Attendance for the date - WITH CACHING
-                const ATTENDANCE_CACHE_KEY = `cached_attendance_${date}`;
-                const ATTENDANCE_TIME_KEY = `cached_attendance_time_${date}`;
-                const ATTENDANCE_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-
-                const cachedAttendance = localStorage.getItem(ATTENDANCE_CACHE_KEY);
-                const cachedTime = localStorage.getItem(ATTENDANCE_TIME_KEY);
-                const now = Date.now();
-
-                if (cachedAttendance && cachedTime) {
-                    const age = now - parseInt(cachedTime);
-                    if (age < ATTENDANCE_CACHE_DURATION) {
-                        console.log(`Using cached attendance for ${date} (${(age / 1000 / 60).toFixed(1)} mins old)`);
-                        setAttendances(JSON.parse(cachedAttendance));
-                        return; // Skip Firestore fetch
-                    }
-                }
-
-                // Fetch fresh attendance data
-                console.log(`Fetching fresh attendance for ${date} from Firestore`);
-                const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', date));
-                const attendanceSnap = await getDocs(attendanceQuery);
-                const attendanceData = attendanceSnap.docs.map(doc => doc.data() as AttendanceRecord);
+                const [studentsData, attendanceData] = await Promise.all([
+                    loadStudents(),
+                    loadAttendance(date)
+                ]);
+                setStudents(studentsData);
                 setAttendances(attendanceData);
-
-                // Save to cache
-                try {
-                    localStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(attendanceData));
-                    localStorage.setItem(ATTENDANCE_TIME_KEY, now.toString());
-                } catch (err) {
-                    console.error('Failed to save attendance cache', err);
-                }
-
             } catch (error) {
                 console.error("Error fetching report data:", error);
             } finally {
-                // Ensure minimum 3 seconds loading time for smooth animation
-                const elapsedTime = Date.now() - startTime;
-                const minLoadingTime = 3000;
-                const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-
-                setTimeout(() => {
-                    setLoading(false);
-                }, remainingTime);
+                const elapsed = Date.now() - startTime;
+                setTimeout(() => setLoading(false), Math.max(0, 3000 - elapsed));
             }
         };
 
-        if (date) {
-            fetchData();
-        }
+        if (date) fetchData();
     }, [date, isInitialized]);
 
-    // Calculate missing classes - classes with students but no attendance records
+    // Calculate missing classes
     const missingClasses = useMemo(() => {
-        const uniqueGrades: string[] = [...new Set<string>(students.map(s => s.grade))];
-        return uniqueGrades.filter(grade => {
-            const studentsInGrade = students.filter(s => s.grade === grade);
-            const attendanceCount = attendances.filter(a => a.grade === grade).length;
-            return attendanceCount === 0 && studentsInGrade.length > 0;
-        }).sort((a: string, b: string) => {
-            // Sort: Kindergarten first, then Primary
-            const isKA = a.includes('อนุบาล');
-            const isKB = b.includes('อนุบาล');
-            if (isKA && !isKB) return -1;
-            if (!isKA && isKB) return 1;
-            const numA = parseInt(a.match(/\d+/)?.[0] || '0');
-            const numB = parseInt(b.match(/\d+/)?.[0] || '0');
-            return numA - numB;
-        });
+        const grades = [...new Set<string>(students.map(s => s.grade))];
+        return grades
+            .filter(grade => {
+                const hasStudents = students.some(s => s.grade === grade);
+                const hasAttendance = attendances.some(a => a.grade === grade);
+                return hasStudents && !hasAttendance;
+            })
+            .sort((a, b) => {
+                const isKA = a.includes('อนุบาล'), isKB = b.includes('อนุบาล');
+                if (isKA && !isKB) return -1;
+                if (!isKA && isKB) return 1;
+                return parseInt(a.match(/\d+/)?.[0] || '0') - parseInt(b.match(/\d+/)?.[0] || '0');
+            });
     }, [students, attendances]);
 
     const handlePrintClick = () => {
-        if (missingClasses.length > 0) {
-            setShowWarningModal(true);
-        } else {
-            window.print();
-        }
+        missingClasses.length > 0 ? setShowWarningModal(true) : window.print();
     };
 
-    // Refresh data - clear cache and fetch fresh data
+    // Refresh data - clear cache and fetch fresh
     const handleRefreshData = async () => {
         setLoading(true);
         const startTime = Date.now();
 
         try {
-            // Clear attendance cache for current date
-            const ATTENDANCE_CACHE_KEY = `cached_attendance_${date}`;
-            const ATTENDANCE_TIME_KEY = `cached_attendance_time_${date}`;
-            localStorage.removeItem(ATTENDANCE_CACHE_KEY);
-            localStorage.removeItem(ATTENDANCE_TIME_KEY);
-            console.log(`Cleared attendance cache for ${date}`);
+            // Clear cache for current date
+            localStorage.removeItem(getAttendanceCacheKey(date));
+            localStorage.removeItem(getAttendanceTimeKey(date));
 
-            // Fetch fresh students data (from main App cache)
-            const STUDENTS_CACHE_KEY = 'cached_students';
-            const cachedStudents = localStorage.getItem(STUDENTS_CACHE_KEY);
-            if (cachedStudents) {
-                setStudents(JSON.parse(cachedStudents));
-            } else {
-                const studentsQuery = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
-                const studentsSnap = await getDocs(studentsQuery);
-                const studentsData = studentsSnap.docs.map(doc => mapStudentData(doc.id, doc.data()));
-                setStudents(studentsData);
-            }
-
-            // Fetch fresh attendance data
-            console.log(`Refreshing attendance for ${date} from Firestore`);
-            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', date));
-            const attendanceSnap = await getDocs(attendanceQuery);
-            const attendanceData = attendanceSnap.docs.map(doc => doc.data() as AttendanceRecord);
+            const [studentsData, attendanceData] = await Promise.all([
+                loadStudents(),
+                loadAttendance(date, true)
+            ]);
+            setStudents(studentsData);
             setAttendances(attendanceData);
-
-            // Save new data to cache
-            const now = Date.now();
-            localStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(attendanceData));
-            localStorage.setItem(ATTENDANCE_TIME_KEY, now.toString());
-
         } catch (error) {
             console.error("Error refreshing data:", error);
         } finally {
-            const elapsedTime = Date.now() - startTime;
-            const minLoadingTime = 1000; // Shorter loading for refresh
-            const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
-            setTimeout(() => setLoading(false), remainingTime);
+            const elapsed = Date.now() - startTime;
+            setTimeout(() => setLoading(false), Math.max(0, 1000 - elapsed));
         }
     };
 
