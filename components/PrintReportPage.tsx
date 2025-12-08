@@ -231,6 +231,9 @@ export const PrintReportPage: React.FC = () => {
                                 <RefreshCw className="w-5 h-5" />
                             </button>
                         </div>
+                        <p className="text-xs text-red-500 mt-1">
+                            * กดปุ่มรีเฟรช 🔄 เพื่อโหลดข้อมูลใหม่หลังจากมีการบันทึกเพิ่ม
+                        </p>
                     </div>
 
                     <hr />
