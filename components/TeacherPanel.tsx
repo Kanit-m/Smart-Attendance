@@ -41,7 +41,7 @@ const STATUS_CONFIG = [
 
 export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout }) => {
     // Navigation & View State
-    const [currentView, setCurrentView] = useState<'check' | 'dashboard' | 'school_dashboard' | 'room_history'>('check');
+    const [currentView, setCurrentView] = useState<'check' | 'dashboard' | 'school_dashboard' | 'room_history'>('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
 
     // Data State
