@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { doc, getDocs, collection, query, orderBy, where } from 'firebase/firestore/lite';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getDocs, collection, query, orderBy, where } from 'firebase/firestore/lite';
 import { db } from '../firebase';
-import { Student, AttendanceRecord, AppUser } from '../types';
+import { Student, AttendanceRecord } from '../types';
 import { mapStudentData } from '../utils';
 import { DailyReportPreview } from './DailyReportPreview';
 import { PrintLoading } from './PrintLoading';
-import { Printer, ArrowLeft } from 'lucide-react';
+import { Printer, ArrowLeft, AlertTriangle, X } from 'lucide-react';
 
 export const PrintReportPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
@@ -24,6 +24,9 @@ export const PrintReportPage: React.FC = () => {
 
     // Track if initial URL parse is complete
     const [isInitialized, setIsInitialized] = useState(false);
+
+    // Warning Modal State
+    const [showWarningModal, setShowWarningModal] = useState(false);
 
     // Get date from URL on initial load
     useEffect(() => {
@@ -79,8 +82,31 @@ export const PrintReportPage: React.FC = () => {
         }
     }, [date, isInitialized]);
 
-    const handlePrint = () => {
-        window.print();
+    // Calculate missing classes - classes with students but no attendance records
+    const missingClasses = useMemo(() => {
+        const uniqueGrades: string[] = [...new Set<string>(students.map(s => s.grade))];
+        return uniqueGrades.filter(grade => {
+            const studentsInGrade = students.filter(s => s.grade === grade);
+            const attendanceCount = attendances.filter(a => a.grade === grade).length;
+            return attendanceCount === 0 && studentsInGrade.length > 0;
+        }).sort((a: string, b: string) => {
+            // Sort: Kindergarten first, then Primary
+            const isKA = a.includes('อนุบาล');
+            const isKB = b.includes('อนุบาล');
+            if (isKA && !isKB) return -1;
+            if (!isKA && isKB) return 1;
+            const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+            const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+            return numA - numB;
+        });
+    }, [students, attendances]);
+
+    const handlePrintClick = () => {
+        if (missingClasses.length > 0) {
+            setShowWarningModal(true);
+        } else {
+            window.print();
+        }
     };
 
     if (loading) {
@@ -183,12 +209,25 @@ export const PrintReportPage: React.FC = () => {
 
                     {/* Print Button */}
                     <button
-                        onClick={handlePrint}
+                        onClick={handlePrintClick}
                         className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-md hover:bg-blue-700 flex items-center justify-center gap-2 mt-8"
                     >
                         <Printer className="w-5 h-5" />
                         พิมพ์รายงาน
                     </button>
+
+                    {/* Missing Classes Warning */}
+                    {missingClasses.length > 0 && (
+                        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 text-amber-700 font-bold text-sm mb-2">
+                                <AlertTriangle className="w-4 h-4" />
+                                ยังมีห้องที่ไม่ได้บันทึก ({missingClasses.length} ห้อง)
+                            </div>
+                            <div className="text-xs text-amber-600">
+                                {missingClasses.join(', ')}
+                            </div>
+                        </div>
+                    )}
 
                     <p className="text-xs text-gray-400 text-center mt-4">
                         * กดพิมพ์แล้วแผงควบคุมนี้จะถูกซ่อนอัตโนมัติ
@@ -199,7 +238,7 @@ export const PrintReportPage: React.FC = () => {
             {/* Right: Preview Area */}
             <div className="flex-1 bg-gray-500 p-8 overflow-y-auto h-screen flex justify-center print:p-0 print:h-auto print:overflow-visible">
                 <DailyReportPreview
-                    students={students}
+                    students={students.filter(s => !s.status || s.status === 'active')}
                     attendances={attendances}
                     date={date}
                     dutyLog={dutyLog}
@@ -222,6 +261,69 @@ export const PrintReportPage: React.FC = () => {
                     animation: fadeIn 0.5s ease-out forwards;
                 }
             `}</style>
+
+            {/* Warning Modal - Incomplete Data */}
+            {showWarningModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in print:hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-amber-50">
+                            <h3 className="font-bold text-lg text-amber-800 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                ไม่สามารถพิมพ์ได้
+                            </h3>
+                            <button
+                                onClick={() => setShowWarningModal(false)}
+                                className="p-1 hover:bg-amber-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-amber-600" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6">
+                            <div className="text-center mb-6">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
+                                    <AlertTriangle className="w-8 h-8 text-amber-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-800 mb-2">
+                                    ยังมีห้องที่ไม่ได้บันทึก
+                                </h4>
+                                <p className="text-sm text-gray-500">
+                                    กรุณาบันทึกข้อมูลการเช็คชื่อให้ครบก่อนพิมพ์รายงาน
+                                </p>
+                            </div>
+
+                            {/* Missing Classes List */}
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                                <div className="text-xs font-bold text-amber-700 mb-2">
+                                    ห้องเรียนที่ยังไม่ได้บันทึก ({missingClasses.length} ห้อง):
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {missingClasses.map((grade, idx) => (
+                                        <span
+                                            key={idx}
+                                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200"
+                                        >
+                                            {grade}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50">
+                            <button
+                                onClick={() => setShowWarningModal(false)}
+                                className="w-full py-3 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-colors"
+                            >
+                                เข้าใจแล้ว
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
