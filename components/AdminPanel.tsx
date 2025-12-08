@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import {
   UserPlus, Users, Upload, Trash2, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
-  GraduationCap, Pencil, Edit2, UserMinus, RotateCcw
+  GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -68,6 +69,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [holidayForm, setHolidayForm] = useState({ date: '', description: '' });
 
+  // State for attendance recording times view
+  const [recordTimesDate, setRecordTimesDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [attendanceRecords, setAttendanceRecords] = useState<{ grade: string; timestamp: number | null }[]>([]);
+  const [loadingRecordTimes, setLoadingRecordTimes] = useState(false);
+  const [timeDistribution, setTimeDistribution] = useState<{ hour: string; count: number }[]>([]);
+  const [sortByTime, setSortByTime] = useState<'asc' | 'desc' | null>(null);
+  // Date range for chart
+  const [chartStartDate, setChartStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6); // Default: last 7 days
+    return d.toLocaleDateString('sv-SE');
+  });
+  const [chartEndDate, setChartEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [chartGradeFilter, setChartGradeFilter] = useState<string>(''); // '' = all grades
+
   // Track if data has been loaded to prevent redundant fetches
   const [dataLoaded, setDataLoaded] = useState({
     students: false,
@@ -86,8 +103,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (activeTab === 5) {
       if (!dataLoaded.holidays) fetchHolidays();
     }
+    if (activeTab === 6) {
+      fetchAttendanceRecordTimes();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
+
+  // Re-fetch when date changes for record times tab
+  useEffect(() => {
+    if (activeTab === 6) {
+      fetchAttendanceRecordTimes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordTimesDate]);
 
   useEffect(() => {
     if (editingHoliday) {
@@ -140,6 +168,91 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       setHolidays(data);
       setDataLoaded(prev => ({ ...prev, holidays: true }));
     } catch (e) { console.error(e); } finally { setLoadingData(false); }
+  };
+
+  const fetchAttendanceRecordTimes = async () => {
+    setLoadingRecordTimes(true);
+    try {
+      // Query attendance records for the selected date (for table only)
+      const q = query(collection(db, 'attendance'), where('date', '==', recordTimesDate));
+      const snapshot = await getDocs(q);
+
+      // Group by grade and get the latest timestamp for each grade
+      const gradeTimestamps: Record<string, number> = {};
+
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        const grade = data.grade as string;
+        const ts = data.timestamp as number;
+        if (!gradeTimestamps[grade] || ts > gradeTimestamps[grade]) {
+          gradeTimestamps[grade] = ts;
+        }
+      });
+
+      // Create array for all grades with their timestamps (null if not recorded)
+      const results = GRADE_OPTIONS.map(grade => ({
+        grade,
+        timestamp: gradeTimestamps[grade] || null
+      }));
+
+      setAttendanceRecords(results);
+    } catch (e) { console.error(e); } finally { setLoadingRecordTimes(false); }
+  };
+
+  const fetchChartData = async () => {
+    setLoadingChart(true);
+    try {
+      // Generate all dates in range
+      const dates: string[] = [];
+      const start = new Date(chartStartDate);
+      const end = new Date(chartEndDate);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        dates.push(d.toLocaleDateString('sv-SE'));
+      }
+
+      // Query attendance records for all dates in range
+      const hourCounts: Record<number, number> = {};
+
+      // Firestore doesn't support 'in' with more than 30 items, so we batch
+      const batchSize = 30;
+      for (let i = 0; i < dates.length; i += batchSize) {
+        const batch = dates.slice(i, i + batchSize);
+        const q = query(collection(db, 'attendance'), where('date', 'in', batch));
+        const snapshot = await getDocs(q);
+
+        // Group by date+grade to get unique recordings per grade per day
+        const dateGradeTimestamps: Record<string, number> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const grade = data.grade as string;
+
+          // Filter by grade if specified
+          if (chartGradeFilter && grade !== chartGradeFilter) return;
+
+          const key = `${data.date}_${grade}`;
+          const ts = data.timestamp as number;
+          if (!dateGradeTimestamps[key] || ts > dateGradeTimestamps[key]) {
+            dateGradeTimestamps[key] = ts;
+          }
+        });
+
+        // Count by hour
+        Object.values(dateGradeTimestamps).forEach(ts => {
+          const hour = new Date(ts).getHours();
+          hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+        });
+      }
+
+      // Create time distribution array for chart (from 6:00 to 18:00)
+      const distribution: { hour: string; count: number }[] = [];
+      for (let h = 6; h <= 18; h++) {
+        distribution.push({
+          hour: `${h.toString().padStart(2, '0')}:00`,
+          count: hourCounts[h] || 0
+        });
+      }
+      setTimeDistribution(distribution);
+    } catch (e) { console.error(e); } finally { setLoadingChart(false); }
   };
 
   const handleAddStudent = async (e: React.FormEvent) => {
@@ -399,6 +512,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 3, label: 'ครู', icon: UserPlus },
     { id: 4, label: 'ลบ/แก้', icon: Trash2 },
     { id: 5, label: 'ระบบ', icon: Settings },
+    { id: 6, label: 'เวลาบันทึก', icon: Clock },
   ];
 
   return (
@@ -717,6 +831,201 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 ))}
                 {holidays.length === 0 && <div className="text-center text-gray-400 py-4">ไม่มีรายการวันหยุด</div>}
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 6 && (
+          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="font-bold mb-4 text-black flex items-center gap-2">
+                <Clock className="w-5 h-5 text-brand-600" /> เวลาบันทึกการเช็คชื่อ
+              </h3>
+
+              {/* Date Picker */}
+              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Calendar className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="date"
+                    className={`${INPUT_STYLE} pl-10 cursor-pointer`}
+                    value={recordTimesDate}
+                    onChange={e => setRecordTimesDate(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={fetchAttendanceRecordTimes}
+                  disabled={loadingRecordTimes}
+                  className={`${BTN_PRIMARY} px-6`}
+                >
+                  {loadingRecordTimes ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ดูข้อมูล'}
+                </button>
+              </div>
+
+              {/* Results Table */}
+              <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                <table className="w-full text-sm text-left text-black">
+                  <thead className="text-xs text-gray-600 uppercase bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3">ระดับชั้น</th>
+                      <th className="px-4 py-3 text-center">สถานะ</th>
+                      <th className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setSortByTime(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
+                          className="inline-flex items-center gap-1 hover:text-brand-600 transition-colors"
+                        >
+                          เวลาบันทึก
+                          {sortByTime === 'asc' ? <ArrowUp className="w-3 h-3" /> :
+                            sortByTime === 'desc' ? <ArrowDown className="w-3 h-3" /> :
+                              <ArrowUpDown className="w-3 h-3 opacity-50" />}
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {[...attendanceRecords]
+                      .sort((a, b) => {
+                        if (!sortByTime) return 0;
+                        const aTime = a.timestamp || 0;
+                        const bTime = b.timestamp || 0;
+                        return sortByTime === 'asc' ? aTime - bTime : bTime - aTime;
+                      })
+                      .map(record => (
+                        <tr key={record.grade} className="hover:bg-blue-50/50 transition-colors">
+                          <td className="px-4 py-3 font-bold text-black">{record.grade}</td>
+                          <td className="px-4 py-3 text-center">
+                            {record.timestamp ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <CheckCircle className="w-3 h-3" />
+                                บันทึกแล้ว
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                                <XCircle className="w-3 h-3" />
+                                ยังไม่บันทึก
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600 font-mono">
+                            {record.timestamp
+                              ? new Date(record.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                              : '-'
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {attendanceRecords.length === 0 && !loadingRecordTimes && (
+                <div className="text-center text-gray-400 py-8">
+                  เลือกวันที่แล้วกดปุ่ม "ดูข้อมูล" เพื่อดูเวลาบันทึก
+                </div>
+              )}
+
+              {loadingRecordTimes && (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+                </div>
+              )}
+            </div>
+
+            {/* Time Distribution Chart with Date Range */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="font-bold mb-4 text-black flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-600" /> กราฟช่วงเวลาที่บันทึกบ่อย
+              </h3>
+
+              {/* Date Range Picker */}
+              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-purple-50 p-4 rounded-xl border border-purple-100">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-purple-700 mb-1 block">วันเริ่มต้น</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Calendar className="h-4 w-4 text-purple-400" />
+                    </div>
+                    <input
+                      type="date"
+                      className={`${INPUT_STYLE} pl-10 cursor-pointer border-purple-200 focus:ring-purple-300`}
+                      value={chartStartDate}
+                      onChange={e => setChartStartDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-purple-700 mb-1 block">วันสิ้นสุด</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Calendar className="h-4 w-4 text-purple-400" />
+                    </div>
+                    <input
+                      type="date"
+                      className={`${INPUT_STYLE} pl-10 cursor-pointer border-purple-200 focus:ring-purple-300`}
+                      value={chartEndDate}
+                      onChange={e => setChartEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-purple-700 mb-1 block">ระดับชั้น</label>
+                  <select
+                    className={`${INPUT_STYLE} border-purple-200 focus:ring-purple-300`}
+                    value={chartGradeFilter}
+                    onChange={e => setChartGradeFilter(e.target.value)}
+                  >
+                    <option value="">ทุกระดับชั้น</option>
+                    {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={fetchChartData}
+                    disabled={loadingChart}
+                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center h-[42px]"
+                  >
+                    {loadingChart ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ดูกราฟ'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Chart */}
+              {timeDistribution.length > 0 && timeDistribution.some(d => d.count > 0) ? (
+                <div className="space-y-2">
+                  {timeDistribution.map(item => {
+                    const maxCount = Math.max(...timeDistribution.map(d => d.count), 1);
+                    const percentage = (item.count / maxCount) * 100;
+                    return (
+                      <div key={item.hour} className="flex items-center gap-3">
+                        <span className="w-14 text-xs font-mono text-gray-500 text-right">{item.hour}</span>
+                        <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${item.count > 0 ? 'bg-gradient-to-r from-purple-500 to-brand-500' : 'bg-transparent'
+                              }`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <span className={`w-8 text-sm font-bold text-right ${item.count > 0 ? 'text-purple-600' : 'text-gray-300'}`}>
+                          {item.count}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-gray-400 mt-4 text-center">
+                    จำนวนครั้งที่บันทึกในแต่ละช่วงเวลา ({chartGradeFilter || 'ทุกชั้น'} ในช่วงที่เลือก)
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center text-gray-400 py-8">
+                  {loadingChart ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
+                  ) : (
+                    <>เลือกช่วงวันที่แล้วกดปุ่ม "ดูกราฟ" เพื่อดูสถิติ</>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

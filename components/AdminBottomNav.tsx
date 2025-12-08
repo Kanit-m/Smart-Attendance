@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Users, Plus, Settings, UserPlus, GraduationCap, Pencil, LogOut } from 'lucide-react';
+import { Home, Users, Plus, Settings, UserPlus, GraduationCap, Pencil, LogOut, Clock } from 'lucide-react';
 
 interface AdminBottomNavProps {
     activeTab: number;
@@ -26,6 +26,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
         { id: 2, label: 'เพิ่มนักเรียน', icon: <UserPlus className="w-5 h-5" />, color: 'bg-blue-500' },
         { id: 3, label: 'เพิ่มครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-emerald-500' },
         { id: 4, label: 'ลบ/แก้ไข', icon: <Pencil className="w-5 h-5" />, color: 'bg-amber-500' },
+        { id: 6, label: 'เวลาบันทึก', icon: <Clock className="w-5 h-5" />, color: 'bg-purple-500' },
     ];
 
     const handleSpeedDialItemClick = (tabId: number) => {
@@ -34,7 +35,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
     };
 
     // Check if current tab is one of the speed dial tabs
-    const isSpeedDialTabActive = [2, 3, 4].includes(activeTab);
+    const isSpeedDialTabActive = [2, 3, 4, 6].includes(activeTab);
 
     // Use portal to render at body level (fixes fixed positioning inside overflow containers)
     return createPortal(
