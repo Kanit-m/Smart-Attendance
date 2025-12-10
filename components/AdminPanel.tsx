@@ -4,7 +4,7 @@ import {
   UserPlus, Users, Upload, Trash2, Settings, Calendar, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown
+  ArrowUpDown, ArrowUp, ArrowDown, Sun
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -100,7 +100,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (activeTab === 3 && !dataLoaded.teachers) {
       fetchTeachers();
     }
-    if (activeTab === 5) {
+    if (activeTab === 0 || activeTab === 5 || activeTab === 6) {
       if (!dataLoaded.holidays) fetchHolidays();
     }
     if (activeTab === 6) {
@@ -892,30 +892,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                         const bTime = b.timestamp || 0;
                         return sortByTime === 'asc' ? aTime - bTime : bTime - aTime;
                       })
-                      .map(record => (
-                        <tr key={record.grade} className="hover:bg-blue-50/50 transition-colors">
-                          <td className="px-4 py-3 font-bold text-black">{record.grade}</td>
-                          <td className="px-4 py-3 text-center">
-                            {record.timestamp ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                <CheckCircle className="w-3 h-3" />
-                                บันทึกแล้ว
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
-                                <XCircle className="w-3 h-3" />
-                                ยังไม่บันทึก
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-600 font-mono">
-                            {record.timestamp
-                              ? new Date(record.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                              : '-'
-                            }
-                          </td>
-                        </tr>
-                      ))}
+                      .map(record => {
+                        const currentHoliday = holidays.find(h => h.date === recordTimesDate);
+                        return (
+                          <tr key={record.grade} className="hover:bg-blue-50/50 transition-colors">
+                            <td className="px-4 py-3 font-bold text-black">{record.grade}</td>
+                            <td className="px-4 py-3 text-center">
+                              {currentHoliday ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                                  <Sun className="w-3 h-3" />
+                                  วันหยุด: {currentHoliday.description}
+                                </span>
+                              ) : record.timestamp ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle className="w-3 h-3" />
+                                  บันทึกแล้ว
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                                  <XCircle className="w-3 h-3" />
+                                  ยังไม่บันทึก
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-600 font-mono">
+                              {record.timestamp
+                                ? new Date(record.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                                : '-'
+                              }
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>

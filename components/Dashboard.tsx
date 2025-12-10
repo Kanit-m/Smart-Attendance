@@ -40,7 +40,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
     const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [todayHoliday, setTodayHoliday] = useState<Holiday | null>(null);
+    // todayHoliday is now derived below
 
     // Carousel State for Kindergarten (K) and Primary (P)
     const [kIndex, setKIndex] = useState(0);
@@ -68,6 +68,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Use parent holidays if provided, otherwise cache locally
     const [holidaysCache, setHolidaysCache] = useState<Holiday[] | null>(parentHolidays || null);
 
+    // Derived holiday state to ensure reactivity when props change
+    const todayHoliday = useMemo(() => {
+        const activeHolidays = parentHolidays || holidaysCache || [];
+        return activeHolidays.find(h => h.date === currentDate) || null;
+    }, [parentHolidays, holidaysCache, currentDate]);
+
     useEffect(() => {
         fetchData(currentDate);
     }, [currentDate]); // Only re-fetch when date changes
@@ -83,8 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 setHolidaysCache(holidays);
             }
 
-            const holiday = holidays.find(h => h.date === targetDate);
-            setTodayHoliday(holiday || null);
+            // todayHoliday is now derived, no need to set state here
 
             // Check if it's a weekend - skip fetching attendance data
             const dateObj = new Date(targetDate);
@@ -96,10 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 return;
             }
 
-            // Students are now passed via props, no need to fetch here
-            // const studentsSnapshot = await getDocs(collection(db, 'students'));
-            // const studentsData = studentsSnapshot.docs.map(doc => mapStudentData(doc.id, doc.data()));
-            // setStudents(studentsData);
+            // Students are passed via props, no need to fetch here
 
             const q = query(collection(db, 'attendance'), where('date', '==', targetDate));
             const attSnapshot = await getDocs(q);
