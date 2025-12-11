@@ -120,13 +120,11 @@ function App() {
       if (!force && cachedData && cachedTime) {
         const age = now - parseInt(cachedTime);
         if (age < CACHE_DURATION) {
-          console.log(`Using cached student data (${(age / 1000 / 60).toFixed(1)} mins old)`);
           setStudents(JSON.parse(cachedData));
           return;
         }
       }
 
-      console.log("Fetching fresh student data from Firestore");
       const q = query(collection(db, 'students'), orderBy('grade'), orderBy('number'));
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => mapStudentData(doc.id, doc.data()));

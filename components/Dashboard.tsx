@@ -70,6 +70,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Use parent holidays if provided, otherwise cache locally
     const [holidaysCache, setHolidaysCache] = useState<Holiday[] | null>(parentHolidays || null);
 
+    // --- Cache Configuration (Shared with other components) ---
+    const HOLIDAYS_CACHE_KEY = 'cached_holidays';
+    const HOLIDAYS_TIME_KEY = 'cached_holidays_time';
+    const HOLIDAYS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+    const ACTIVITIES_CACHE_KEY = 'cached_activities';
+    const ACTIVITIES_TIME_KEY = 'cached_activities_time';
+    const ACTIVITIES_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hour
+
     // Derived holiday state to ensure reactivity when props change
     const [calendarItems, setCalendarItems] = useState<{ type: 'holiday' | 'activity', date: string, title: string, description?: string, id: string }[]>([]);
 
@@ -84,16 +92,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
     const fetchData = async (targetDate: string) => {
         setLoading(true);
+        const now = Date.now();
+
         try {
-            // Use parent holidays or cached holidays, only fetch if neither available
+            // --- HOLIDAYS: Use shared cache ---
             let holidays = parentHolidays || holidaysCache;
             if (!holidays) {
-                const holidaysSnapshot = await getDocs(collection(db, 'holidays'));
-                holidays = holidaysSnapshot.docs.map(doc => doc.data() as Holiday);
-                setHolidaysCache(holidays);
-            }
+                // Try localStorage cache first
+                const cachedHolidays = localStorage.getItem(HOLIDAYS_CACHE_KEY);
+                const cachedHolidaysTime = localStorage.getItem(HOLIDAYS_TIME_KEY);
 
-            // todayHoliday is now derived, no need to set state here
+                if (cachedHolidays && cachedHolidaysTime && (now - parseInt(cachedHolidaysTime)) < HOLIDAYS_CACHE_DURATION) {
+                    holidays = JSON.parse(cachedHolidays);
+                    setHolidaysCache(holidays);
+                } else {
+                    // Fetch from Firestore
+                    const holidaysSnapshot = await getDocs(collection(db, 'holidays'));
+                    holidays = holidaysSnapshot.docs.map(doc => doc.data() as Holiday);
+                    setHolidaysCache(holidays);
+                    // Save to localStorage
+                    try {
+                        localStorage.setItem(HOLIDAYS_CACHE_KEY, JSON.stringify(holidays));
+                        localStorage.setItem(HOLIDAYS_TIME_KEY, now.toString());
+                    } catch { /* ignore */ }
+                }
+            }
 
             // Check if it's a weekend - skip fetching attendance data
             const dateObj = new Date(targetDate);
@@ -112,22 +135,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             const attData = attSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
             setAttendances(attData);
 
-            // Fetch School Activities (Only if not already fetched or optimize? For now fetch every time or check cache)
-            // Ideally we should cache this too if it doesn't change often.
-            // For now, let's just fetch simplified upcoming activities
+            // --- ACTIVITIES: Use localStorage cache ---
             try {
-                // Fetch activities from today onwards
-                const qAct = query(collection(db, 'school_activities'), orderBy('date', 'desc'));
-                const actSnapshot = await getDocs(qAct);
-                const acts = actSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolActivity));
+                const cachedActs = localStorage.getItem(ACTIVITIES_CACHE_KEY);
+                const cachedActsTime = localStorage.getItem(ACTIVITIES_TIME_KEY);
 
-                // Filter for relevant activities (e.g., from current month or upcoming)
-                // Showing all future activities + activities from this month
+                let acts: SchoolActivity[];
+
+                if (cachedActs && cachedActsTime && (now - parseInt(cachedActsTime)) < ACTIVITIES_CACHE_DURATION) {
+                    acts = JSON.parse(cachedActs);
+                } else {
+                    // Fetch from Firestore
+                    const qAct = query(collection(db, 'school_activities'), orderBy('date', 'desc'));
+                    const actSnapshot = await getDocs(qAct);
+                    acts = actSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolActivity));
+                    // Save to cache
+                    try {
+                        localStorage.setItem(ACTIVITIES_CACHE_KEY, JSON.stringify(acts));
+                        localStorage.setItem(ACTIVITIES_TIME_KEY, now.toString());
+                    } catch { /* ignore */ }
+                }
+
+                // Filter for relevant activities (from today onwards, current month)
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-
-                // Filter for upcoming activities (from today onwards, current month only)
-                // Use local date string to avoid timezone issues (toISOString converts to UTC)
                 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
                 const currentMonth = today.getMonth();
                 const currentYear = today.getFullYear();
@@ -144,13 +175,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 }));
 
                 // Merge with upcoming holidays (from today onwards, current month only)
-                const relevantHolidays = holidays.filter(h => {
+                const relevantHolidays = holidays!.filter(h => {
                     const hDate = new Date(h.date);
                     return h.date >= todayStr && hDate.getMonth() === currentMonth && hDate.getFullYear() === currentYear;
                 }).map(h => ({
                     type: 'holiday' as const,
                     date: h.date,
-                    title: h.description, // Holidays usually have description as main title
+                    title: h.description,
                     description: 'วันหยุด',
                     id: h.id
                 }));

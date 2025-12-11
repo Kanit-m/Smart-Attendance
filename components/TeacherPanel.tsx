@@ -73,12 +73,36 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     // Track if holidays have been loaded
     const [holidaysLoaded, setHolidaysLoaded] = useState(false);
 
+    // --- Cache Configuration ---
+    const HOLIDAYS_CACHE_KEY = 'cached_holidays';
+    const HOLIDAYS_TIME_KEY = 'cached_holidays_time';
+    const HOLIDAYS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
     // --- Data Loading ---
     useEffect(() => {
         if (holidaysLoaded) return; // Skip if already loaded
-        getDocs(query(collection(db, 'holidays'))).then(snap => {
-            setHolidays(snap.docs.map(d => d.data() as Holiday));
+
+        // Try cache first
+        const now = Date.now();
+        const cached = localStorage.getItem(HOLIDAYS_CACHE_KEY);
+        const cachedTime = localStorage.getItem(HOLIDAYS_TIME_KEY);
+
+        if (cached && cachedTime && (now - parseInt(cachedTime)) < HOLIDAYS_CACHE_DURATION) {
+            setHolidays(JSON.parse(cached));
             setHolidaysLoaded(true);
+            return;
+        }
+
+        // Fetch from Firestore
+        getDocs(query(collection(db, 'holidays'))).then(snap => {
+            const data = snap.docs.map(d => d.data() as Holiday);
+            setHolidays(data);
+            setHolidaysLoaded(true);
+            // Save to cache
+            try {
+                localStorage.setItem(HOLIDAYS_CACHE_KEY, JSON.stringify(data));
+                localStorage.setItem(HOLIDAYS_TIME_KEY, now.toString());
+            } catch { /* ignore storage errors */ }
         });
     }, [holidaysLoaded]);
 
@@ -113,16 +137,39 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const loadAttendanceData = useCallback(async () => {
         if (students.length === 0) return;
 
+        const ATTENDANCE_CACHE_PREFIX = 'att_cache_';
+        const ATTENDANCE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        const cacheKey = `${ATTENDANCE_CACHE_PREFIX}${selectedDate}_${selectedClass}`;
+        const cacheTimeKey = `${cacheKey}_time`;
+
         try {
-            const q = query(collection(db, 'attendance'), where('date', '==', selectedDate), where('grade', '==', selectedClass));
-            const snap = await getDocs(q);
-            const existing = new Map(snap.docs.map(d => [d.data().studentId, d.data().status]));
+            // Try sessionStorage cache first
+            const cached = sessionStorage.getItem(cacheKey);
+            const cachedTime = sessionStorage.getItem(cacheTimeKey);
+            const now = Date.now();
+
+            let existing: Map<string, string>;
+
+            if (cached && cachedTime && (now - parseInt(cachedTime)) < ATTENDANCE_CACHE_DURATION) {
+                // Use cached data
+                existing = new Map(JSON.parse(cached));
+            } else {
+                // Fetch from Firestore
+                const q = query(collection(db, 'attendance'), where('date', '==', selectedDate), where('grade', '==', selectedClass));
+                const snap = await getDocs(q);
+                existing = new Map(snap.docs.map(d => [d.data().studentId, d.data().status]));
+
+                // Save to sessionStorage
+                try {
+                    sessionStorage.setItem(cacheKey, JSON.stringify([...existing]));
+                    sessionStorage.setItem(cacheTimeKey, now.toString());
+                } catch { /* ignore */ }
+            }
+
             const isHoliday = holidays.find(h => h.date === selectedDate);
             const newState: Record<string, AttendanceStatus> = {};
 
             students.forEach(s => {
-                // Default to null/undefined if not checked yet, or Holiday if it's a holiday
-                // Important: If it's a new day (no record), we default to PRESENT for easier checking
                 newState[s.id] = (existing.get(s.id) as AttendanceStatus) || (isHoliday ? AttendanceStatus.HOLIDAY : AttendanceStatus.PRESENT);
             });
             setAttendanceState(newState);
@@ -205,6 +252,11 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 });
             });
             await batch.commit();
+
+            // Invalidate attendance cache for this date/class
+            const cacheKey = `att_cache_${selectedDate}_${selectedClass}`;
+            sessionStorage.removeItem(cacheKey);
+            sessionStorage.removeItem(`${cacheKey}_time`);
 
             setShowConfirmModal(false);
             setTimeout(() => setSaving(false), 500);

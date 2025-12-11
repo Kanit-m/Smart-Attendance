@@ -43,6 +43,22 @@ const BTN_SECONDARY = "border border-gray-300 bg-white text-black px-4 py-2 roun
 const BTN_SUCCESS = "bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center";
 const BTN_DANGER = "bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed";
 
+// Cache keys for invalidation
+const HOLIDAYS_CACHE_KEY = 'cached_holidays';
+const HOLIDAYS_TIME_KEY = 'cached_holidays_time';
+const ACTIVITIES_CACHE_KEY = 'cached_activities';
+const ACTIVITIES_TIME_KEY = 'cached_activities_time';
+
+// Helper to clear cache
+const clearHolidaysCache = () => {
+  localStorage.removeItem(HOLIDAYS_CACHE_KEY);
+  localStorage.removeItem(HOLIDAYS_TIME_KEY);
+};
+const clearActivitiesCache = () => {
+  localStorage.removeItem(ACTIVITIES_CACHE_KEY);
+  localStorage.removeItem(ACTIVITIES_TIME_KEY);
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout, onStudentChange }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
@@ -349,6 +365,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
         setCalendarEvents(prev => [createdEvent, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
         showToast("เพิ่มเรียบร้อย", 'success');
+
+        // Invalidate cache
+        if (newEvent.type === 'holiday') clearHolidaysCache();
+        else clearActivitiesCache();
       }
 
       setEditingEventId(null);
@@ -373,6 +393,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setCalendarEvents(prev => prev.filter(e => e.id !== id));
           showToast("ลบเรียบร้อย", 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+          // Invalidate cache
+          if (type === 'holiday') clearHolidaysCache();
+          else clearActivitiesCache();
         } catch (e) { console.error(e); } finally { setLoadingAction(false); }
       }
     });
@@ -619,7 +643,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   ];
 
   return (
-    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: 'linear-gradient(to left, #E0F2FE, #CFFAFE)' }}>
+    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: '#F2F8FC' }}>
 
       {/* Sidebar - Hidden on mobile */}
       <div className="hidden md:flex w-64 bg-white/60 border-r border-white/30 flex-col shrink-0">
