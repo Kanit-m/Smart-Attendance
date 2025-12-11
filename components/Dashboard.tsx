@@ -3,13 +3,13 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import {
     Users, UserCheck, UserX, Sun,
     ChevronRight, ChevronLeft, LayoutGrid,
-    Baby, BookOpen, Activity, CalendarDays,
+    Baby, BookOpen, Activity,
     ClipboardCheck, AlertTriangle, Clock, Printer,
-    ChevronDown, ChevronUp, CalendarCheck
+    ChevronDown, ChevronUp, CalendarCheck, CalendarDays
 } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore/lite';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore/lite';
 import { db } from '../firebase';
-import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday, StudentStatus } from '../types';
+import { Student, AttendanceRecord, AttendanceStatus, Gender, Holiday, StudentStatus, SchoolActivity } from '../types';
 import { DailyReport } from './DailyReport';
 
 interface DashboardProps {
@@ -62,13 +62,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Report Modal State
     const [showReportModal, setShowReportModal] = useState(false);
 
-    // Holidays Collapsible State
-    const [isHolidaysExpanded, setIsHolidaysExpanded] = useState(false);
+    // Holidays Collapsible State - REMOVED (Merged into Calendar)
+    // Activities State - REMOVED (Merged into Calendar)
+    // Reusing isActivitiesExpanded for the new Calendar Section to avoid renaming everything now
+    const [isActivitiesExpanded, setIsActivitiesExpanded] = useState(true);
 
     // Use parent holidays if provided, otherwise cache locally
     const [holidaysCache, setHolidaysCache] = useState<Holiday[] | null>(parentHolidays || null);
 
     // Derived holiday state to ensure reactivity when props change
+    const [calendarItems, setCalendarItems] = useState<{ type: 'holiday' | 'activity', date: string, title: string, description?: string, id: string }[]>([]);
+
     const todayHoliday = useMemo(() => {
         const activeHolidays = parentHolidays || holidaysCache || [];
         return activeHolidays.find(h => h.date === currentDate) || null;
@@ -107,6 +111,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             const attSnapshot = await getDocs(q);
             const attData = attSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
             setAttendances(attData);
+
+            // Fetch School Activities (Only if not already fetched or optimize? For now fetch every time or check cache)
+            // Ideally we should cache this too if it doesn't change often.
+            // For now, let's just fetch simplified upcoming activities
+            try {
+                // Fetch activities from today onwards
+                const qAct = query(collection(db, 'school_activities'), orderBy('date', 'desc'));
+                const actSnapshot = await getDocs(qAct);
+                const acts = actSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolActivity));
+
+                // Filter for relevant activities (e.g., from current month or upcoming)
+                // Showing all future activities + activities from this month
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                // Filter for upcoming activities (from today onwards, current month only)
+                // Use local date string to avoid timezone issues (toISOString converts to UTC)
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const currentMonth = today.getMonth();
+                const currentYear = today.getFullYear();
+
+                const relevantActs = acts.filter(a => {
+                    const actDate = new Date(a.date);
+                    return a.date >= todayStr && actDate.getMonth() === currentMonth && actDate.getFullYear() === currentYear;
+                }).map(a => ({
+                    type: 'activity' as const,
+                    date: a.date,
+                    title: a.title,
+                    description: a.description,
+                    id: a.id
+                }));
+
+                // Merge with upcoming holidays (from today onwards, current month only)
+                const relevantHolidays = holidays.filter(h => {
+                    const hDate = new Date(h.date);
+                    return h.date >= todayStr && hDate.getMonth() === currentMonth && hDate.getFullYear() === currentYear;
+                }).map(h => ({
+                    type: 'holiday' as const,
+                    date: h.date,
+                    title: h.description, // Holidays usually have description as main title
+                    description: 'วันหยุด',
+                    id: h.id
+                }));
+
+                // Combine and Sort
+                const combined = [...relevantActs, ...relevantHolidays].sort((a, b) => a.date.localeCompare(b.date));
+                setCalendarItems(combined);
+
+            } catch (err) {
+                console.error("Error fetching activities", err);
+            }
 
         } catch (error) {
             console.error("Error fetching dashboard data:", error);
@@ -359,12 +414,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                 {/* Holiday Overlay - Show when not a school day */}
                 {!isSchoolDay && stats.length > 0 && (
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4 animate-fade-in">
-                        <div className="bg-slate-100 p-4 rounded-full mb-3 shadow-sm">
-                            <CalendarDays className="w-8 h-8 text-slate-500" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-50/95 to-amber-50/95 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4 animate-fade-in">
+                        <div className="bg-orange-100 p-4 rounded-full mb-3 shadow-sm">
+                            <Sun className="w-8 h-8 text-orange-500" />
                         </div>
-                        <h4 className="text-xl font-bold text-gray-700 mb-1">วันหยุด</h4>
-                        <p className="text-sm text-gray-400">ไม่มีการบันทึกข้อมูล</p>
+                        <h4 className="text-xl font-bold text-orange-700 mb-1">
+                            🏖️ {todayHoliday ? todayHoliday.description : 'วันหยุดสุดสัปดาห์'}
+                        </h4>
+                        <p className="text-sm text-orange-500">ไม่มีการบันทึกข้อมูลในวันนี้</p>
                     </div>
                 )}
 
@@ -456,94 +513,131 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 return null;
             })()}
 
-            {/* Monthly Holidays Section */}
-            {(() => {
-                const holidays = parentHolidays || holidaysCache || [];
-                const currentMonth = new Date(currentDate).getMonth();
-                const currentYear = new Date(currentDate).getFullYear();
-                const monthlyHolidays = holidays.filter(h => {
-                    const d = new Date(h.date);
-                    // Only show holidays from today onwards in current month
-                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear && h.date >= currentDate;
-                }).sort((a, b) => a.date.localeCompare(b.date));
-
-                if (monthlyHolidays.length === 0) return null;
-
-                const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-
-                return (
-                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl shadow-sm overflow-hidden animate-slide-up">
-                        {/* Header - Always visible */}
-                        <button
-                            onClick={() => setIsHolidaysExpanded(!isHolidaysExpanded)}
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-amber-100/50 transition-colors"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="bg-amber-100 p-2 rounded-full">
-                                    <CalendarCheck className="w-5 h-5 text-amber-600" />
+            {/* TODAY'S STATUS - Holiday or Submission Summary */}
+            {totalClasses > 0 && (
+                todayHoliday ? (
+                    // HOLIDAY STATUS
+                    <div className="rounded-2xl shadow-sm border overflow-hidden animate-slide-up bg-gradient-to-r from-orange-100 to-amber-100 border-orange-200">
+                        <div className="px-5 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 rounded-full bg-orange-200">
+                                    <Sun className="w-6 h-6 text-orange-600" />
                                 </div>
-                                <div className="text-left">
-                                    <h3 className="font-bold text-amber-800 text-sm">
-                                        วันหยุดเดือน{thaiMonths[currentMonth]}
-                                        <span className="ml-2 bg-amber-200 text-amber-700 text-xs px-2 py-0.5 rounded-full">
-                                            {monthlyHolidays.length} วัน
-                                        </span>
+                                <div>
+                                    <h3 className="font-bold text-lg text-orange-800">
+                                        🏖️ วันหยุด: {todayHoliday.description}
                                     </h3>
-                                    {todayHoliday ? (
-                                        <p className="text-xs text-orange-600 font-medium flex items-center gap-1">
-                                            <Sun className="w-3 h-3" /> วันนี้เป็นวันหยุด: {todayHoliday.description}
-                                        </p>
-                                    ) : (() => {
-                                        // Find next upcoming holiday
-                                        const upcomingHolidays = holidays.filter(h => h.date > currentDate).sort((a, b) => a.date.localeCompare(b.date));
-                                        if (upcomingHolidays.length === 0) return null;
-                                        const next = upcomingHolidays[0];
-                                        const nextDate = new Date(next.date);
-                                        const daysUntil = Math.ceil((nextDate.getTime() - new Date(currentDate).getTime()) / (1000 * 60 * 60 * 24));
-                                        return (
-                                            <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> วันหยุดถัดไป: {next.description} (อีก {daysUntil} วัน)
-                                            </p>
-                                        );
-                                    })()}
+                                    <p className="text-sm text-orange-600">
+                                        ไม่มีการบันทึกข้อมูลการมาเรียนในวันนี้
+                                    </p>
                                 </div>
                             </div>
-                            {isHolidaysExpanded ? (
-                                <ChevronUp className="w-5 h-5 text-amber-500" />
-                            ) : (
-                                <ChevronDown className="w-5 h-5 text-amber-500" />
-                            )}
-                        </button>
+                            <div className="text-3xl">🌴</div>
+                        </div>
+                        <div className="h-1.5 bg-orange-400" />
+                    </div>
+                ) : isSchoolDay ? (
+                    // SCHOOL DAY - RECORDING STATUS
+                    <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
+                        ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
+                        : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+                        }`}>
+                        <div className="px-5 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-full ${isAllSubmitted ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                                    {isAllSubmitted ? (
+                                        <ClipboardCheck className="w-6 h-6 text-emerald-600" />
+                                    ) : (
+                                        <Clock className="w-6 h-6 text-amber-600" />
+                                    )}
+                                </div>
+                                <div>
+                                    <h3 className={`font-bold text-lg ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                        {isAllSubmitted ? '✅ บันทึกครบทุกห้องแล้ว!' : `📊 บันทึกแล้ว ${submittedClasses}/${totalClasses} ห้อง`}
+                                    </h3>
+                                    <p className={`text-sm ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-700'}`}>
+                                        {isAllSubmitted
+                                            ? 'ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้'
+                                            : `รอข้อมูลจาก: ${missingClasses.map(c => c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')).join(', ')}`
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                            <div className={`text-3xl font-bold ${isAllSubmitted ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                {Math.round((submittedClasses / totalClasses) * 100)}%
+                            </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="h-1.5 bg-white/50">
+                            <div
+                                className={`h-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                style={{ width: `${(submittedClasses / totalClasses) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+                ) : null
+            )}
 
-                        {/* Expandable Content */}
-                        {isHolidaysExpanded && (
-                            <div className="px-4 pb-3 border-t border-amber-200/50">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                                    {monthlyHolidays.map((h, idx) => {
-                                        const d = new Date(h.date);
-                                        const isToday = h.date === currentDate;
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${isToday ? 'bg-orange-200/70 border border-orange-300' : 'bg-white/60 border border-amber-100'
-                                                    }`}
-                                            >
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${isToday ? 'bg-orange-500 text-white' : 'bg-amber-100 text-amber-700'
-                                                    }`}>
-                                                    {d.getDate()}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm font-medium truncate ${isToday ? 'text-orange-800' : 'text-amber-800'}`}>
-                                                        {h.description}
-                                                    </p>
-                                                    <p className="text-[10px] text-amber-600">
-                                                        {d.toLocaleDateString('th-TH', { weekday: 'short' })}
-                                                    </p>
-                                                </div>
-                                                {isToday && <Sun className="w-4 h-4 text-orange-500 shrink-0" />}
-                                            </div>
-                                        );
-                                    })}
+            {/* UPCOMING EVENT ALERT - Tomorrow or Next Few Days */}
+            {(() => {
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                // Get tomorrow's date
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+                // Find events in the next 3 days (excluding today)
+                const upcomingAlerts = calendarItems.filter(item => {
+                    const eventDate = new Date(item.date);
+                    const diffDays = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return diffDays > 0 && diffDays <= 3;
+                });
+
+                if (upcomingAlerts.length === 0) return null;
+
+                // Get the most urgent alert (soonest)
+                const urgentAlert = upcomingAlerts[0];
+                const alertDate = new Date(urgentAlert.date);
+                const daysUntil = Math.ceil((alertDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                const isTomorrow = urgentAlert.date === tomorrowStr;
+                const isHoliday = urgentAlert.type === 'holiday';
+
+                return (
+                    <div className={`rounded-2xl shadow-sm border px-5 py-4 flex items-center gap-4 animate-slide-up ${isHoliday
+                        ? 'bg-gradient-to-r from-orange-100 to-amber-100 border-orange-300'
+                        : 'bg-gradient-to-r from-indigo-100 to-blue-100 border-indigo-300'
+                        }`}>
+                        <div className={`p-3 rounded-full ${isHoliday ? 'bg-orange-200' : 'bg-indigo-200'}`}>
+                            {isHoliday ? (
+                                <Sun className="w-6 h-6 text-orange-600" />
+                            ) : (
+                                <CalendarDays className="w-6 h-6 text-indigo-600" />
+                            )}
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isTomorrow
+                                    ? 'bg-red-500 text-white animate-pulse'
+                                    : 'bg-gray-200 text-gray-700'
+                                    }`}>
+                                    {isTomorrow ? '⚡ พรุ่งนี้!' : `อีก ${daysUntil} วัน`}
+                                </span>
+                                {isHoliday && <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">วันหยุด</span>}
+                            </div>
+                            <h3 className={`font-bold text-lg mt-1 ${isHoliday ? 'text-orange-800' : 'text-indigo-800'}`}>
+                                {urgentAlert.title}
+                            </h3>
+                            <p className={`text-sm ${isHoliday ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                {alertDate.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                        </div>
+                        {upcomingAlerts.length > 1 && (
+                            <div className="text-right">
+                                <div className="bg-white/50 px-3 py-1.5 rounded-xl border border-white/30">
+                                    <span className="text-xs text-gray-600">+{upcomingAlerts.length - 1} อื่นๆ</span>
                                 </div>
                             </div>
                         )}
@@ -551,56 +645,154 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 );
             })()}
 
-            {/* Missing Data Alert Box - Hide on weekends and holidays */}
-            {missingClasses.length > 0 && !todayHoliday && (() => {
-                const dateObj = new Date(currentDate);
-                const dayOfWeek = dateObj.getDay();
-                return dayOfWeek !== 0 && dayOfWeek !== 6; // Not Saturday or Sunday
-            })() && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 animate-slide-up shadow-sm">
-                        <div className="bg-amber-100 p-2 rounded-full shrink-0">
-                            <AlertTriangle className="w-6 h-6 text-amber-600" />
+            {/* Combined School Calendar Section */}
+            {calendarItems.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden animate-slide-up">
+                    <button
+                        onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="bg-brand-100 p-2 rounded-full">
+                                <CalendarDays className="w-5 h-5 text-brand-600" />
+                            </div>
+                            <div className="text-left">
+                                <h3 className="font-bold text-gray-900 text-sm">
+                                    ปฏิทินโรงเรียน
+                                    <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                                        {calendarItems.length} รายการ
+                                    </span>
+                                </h3>
+                                {(() => {
+                                    const now = new Date();
+                                    now.setHours(0, 0, 0, 0);
+                                    const todayStr = now.toISOString().split('T')[0];
+
+                                    // Find meaningful "next" or "today" event
+                                    const todayItem = calendarItems.find(i => i.date === todayStr);
+                                    if (todayItem) {
+                                        return (
+                                            <p className={`text-xs font-medium flex items-center gap-1 ${todayItem.type === 'holiday' ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                                <Sun className="w-3 h-3" /> วันนี้: {todayItem.title}
+                                            </p>
+                                        );
+                                    }
+
+                                    const nextItem = calendarItems.find(i => i.date > todayStr);
+                                    if (nextItem) {
+                                        const days = Math.ceil((new Date(nextItem.date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                        return (
+                                            <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> {nextItem.title} (อีก {days} วัน)
+                                            </p>
+                                        );
+                                    }
+                                    return <p className="text-xs text-gray-400">ไม่มีรายการเร็วๆ นี้</p>;
+                                })()}
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <h3 className="font-bold text-amber-800 text-lg flex items-center gap-2">
-                                รอการบันทึกข้อมูล
-                                <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full border border-amber-200">
-                                    {missingClasses.length} ห้อง
-                                </span>
-                            </h3>
-                            <p className="text-sm text-amber-700 mt-1">
-                                ห้องเรียนต่อไปนี้ยังไม่ได้บันทึกข้อมูลการมาเรียน:
-                                <span className="font-bold ml-1">
-                                    {missingClasses.map(c => c.grade).join(', ')}
-                                </span>
-                            </p>
+                        {isActivitiesExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                        ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                        )}
+                    </button>
+
+                    {isActivitiesExpanded && (
+                        <div className="px-4 pb-3 border-t border-gray-100">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                                {calendarItems.map((item) => {
+                                    const itemDate = new Date(item.date);
+                                    const isToday = item.date === new Date().toISOString().split('T')[0];
+                                    const isHoliday = item.type === 'holiday';
+
+                                    // Activity Styles (Blue/Indigo) vs Holiday Styles (Orange/Amber)
+                                    const baseClass = isHoliday
+                                        ? "bg-orange-50/50 border-orange-100 hover:border-orange-200"
+                                        : "bg-indigo-50/50 border-indigo-100 hover:border-indigo-200";
+
+                                    const activeClass = isHoliday
+                                        ? "bg-orange-50 border-orange-300 shadow-md transform scale-[1.02]"
+                                        : "bg-indigo-50 border-indigo-300 shadow-md transform scale-[1.02]";
+
+                                    const iconClass = isHoliday
+                                        ? "bg-orange-100 text-orange-600"
+                                        : "bg-indigo-100 text-indigo-600";
+
+                                    const activeIconClass = isHoliday
+                                        ? "bg-orange-500 text-white"
+                                        : "bg-indigo-500 text-white";
+
+                                    return (
+                                        <div key={`${item.type}-${item.id}`} className={`flex gap-3 p-3 rounded-xl border transition-all ${isToday ? activeClass : baseClass}`}>
+                                            <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg shrink-0 ${isToday ? activeIconClass : iconClass}`}>
+                                                <span className="text-lg font-bold leading-none">{itemDate.getDate()}</span>
+                                                <span className="text-[9px] uppercase font-bold leading-none mt-1">{itemDate.toLocaleDateString('th-TH', { month: 'short' })}</span>
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex justify-between items-start">
+                                                    <h4 className={`font-bold text-sm truncate ${isToday ? (isHoliday ? 'text-orange-900' : 'text-indigo-900') : 'text-gray-800'}`}>
+                                                        {item.title}
+                                                    </h4>
+                                                    {isHoliday && <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-200 text-orange-800 font-bold ml-2">หยุด</span>}
+                                                </div>
+                                                <p className="text-xs text-gray-500 line-clamp-1">{item.description || '-'}</p>
+                                                <p className={`text-[10px] mt-1 ${isToday ? (isHoliday ? 'text-orange-600 font-bold' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>
+                                                    {isToday ? 'วันนี้' : itemDate.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
+            )}
 
             {/* Top Stats Grid - Smart Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-                {/* Card 0: Submission Status (NEW) */}
-                <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                    <div className={`absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
-                    <div className="relative z-10">
-                        <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">สถานะบันทึก</p>
-                        <div className="flex items-baseline gap-1 md:gap-2">
-                            <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
-                                {submittedClasses}<span className="text-lg md:text-2xl text-gray-400">/{totalClasses}</span>
-                            </h3>
+                {/* Card 0: Submission Status or Holiday */}
+                {!isSchoolDay ? (
+                    // HOLIDAY CARD
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-3 md:p-6 shadow-md border border-orange-200 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                        <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-orange-100 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110"></div>
+                        <div className="relative z-10">
+                            <p className="text-orange-600 text-xs md:text-sm font-bold mb-0.5 md:mb-1">วันหยุด</p>
+                            <div className="flex items-baseline gap-1 md:gap-2">
+                                <h3 className="text-sm md:text-lg font-bold text-orange-700 leading-tight">
+                                    {todayHoliday ? todayHoliday.description : 'วันหยุดสุดสัปดาห์'}
+                                </h3>
+                            </div>
+                            <p className="text-[10px] text-orange-500 mt-1">ไม่มีการบันทึก</p>
                         </div>
-                        <div className="mt-1 md:mt-2 w-full bg-gray-100 rounded-full h-1 md:h-1.5">
-                            <div
-                                className={`h-1 md:h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                style={{ width: `${totalClasses > 0 ? (submittedClasses / totalClasses) * 100 : 0}%` }}
-                            ></div>
+                        <div className="relative z-10 p-2 md:p-3 rounded-xl bg-orange-100 text-orange-600">
+                            <Sun className="w-5 h-5 md:w-8 md:h-8" />
                         </div>
                     </div>
-                    <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                        <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
+                ) : (
+                    // SCHOOL DAY - SUBMISSION STATUS CARD
+                    <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
+                        <div className={`absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
+                        <div className="relative z-10">
+                            <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">สถานะบันทึก</p>
+                            <div className="flex items-baseline gap-1 md:gap-2">
+                                <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                    {submittedClasses}<span className="text-lg md:text-2xl text-gray-400">/{totalClasses}</span>
+                                </h3>
+                            </div>
+                            <div className="mt-1 md:mt-2 w-full bg-gray-100 rounded-full h-1 md:h-1.5">
+                                <div
+                                    className={`h-1 md:h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                    style={{ width: `${totalClasses > 0 ? (submittedClasses / totalClasses) * 100 : 0}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                        <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                            <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
+                        </div>
                     </div>
-                </div>
+                )}
                 {/* Card 1: Total Students - Flip Card */}
                 <div
                     className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['students'] ? 'flipped' : ''}`}

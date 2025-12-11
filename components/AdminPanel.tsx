@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  UserPlus, Users, Upload, Trash2, Settings, Calendar, Loader2,
+  UserPlus, Users, Upload, Trash2, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown, Sun
+  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
-  query, where, writeBatch, updateDoc, setDoc
+  query, where, writeBatch, updateDoc, setDoc, orderBy
 } from 'firebase/firestore/lite';
 import * as firebaseApp from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, firebaseConfig } from '../firebase';
-import { Student, TeacherForm, Gender, Role, AppUser, Holiday, StudentStatus } from '../types';
+import { Student, TeacherForm, Gender, Role, AppUser, StudentStatus, SchoolActivity } from '../types';
 import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -47,18 +47,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<AppUser[]>([]);
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  // Holidays are managed via Calendar tab now
   const [filterGrade, setFilterGrade] = useState<string>('');
   const [selectedDeleteGrade, setSelectedDeleteGrade] = useState<string>('');
   const [loadingAction, setLoadingAction] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingTeacher, setEditingTeacher] = useState<AppUser | null>(null);
-  const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  // editingHoliday removed as it is now part of calendarEvents logic
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean; title: string; message: string; action: () => Promise<void>; isDangerous: boolean;
   }>({ isOpen: false, title: '', message: '', action: async () => { }, isDangerous: false });
+
+  // Unified State for Calendar (Holidays + Activities)
+  const [calendarEvents, setCalendarEvents] = useState<{ id: string, type: 'holiday' | 'activity', date: string, title: string, description?: string }[]>([]);
+  const [newEvent, setNewEvent] = useState({ type: 'activity' as 'activity' | 'holiday', title: '', date: '', description: '' });
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   const [newStudent, setNewStudent] = useState<Partial<Student>>({
     studentId: '', number: 0, name: '', grade: GRADE_OPTIONS[0], gender: Gender.MALE
@@ -67,7 +73,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     name: '', assignedClass: GRADE_OPTIONS[0], username: '', password: ''
   });
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [holidayForm, setHolidayForm] = useState({ date: '', description: '' });
+  // Holiday form removed (integrated into Calendar)
 
   // State for attendance recording times view
   const [recordTimesDate, setRecordTimesDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
@@ -84,12 +90,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [chartEndDate, setChartEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartGradeFilter, setChartGradeFilter] = useState<string>(''); // '' = all grades
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
   // Track if data has been loaded to prevent redundant fetches
   const [dataLoaded, setDataLoaded] = useState({
     students: false,
     teachers: false,
-    holidays: false
+    calendar: false
   });
 
   // Only fetch data when tab is accessed AND data hasn't been loaded yet
@@ -100,11 +107,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (activeTab === 3 && !dataLoaded.teachers) {
       fetchTeachers();
     }
-    if (activeTab === 0 || activeTab === 5 || activeTab === 6) {
-      if (!dataLoaded.holidays) fetchHolidays();
-    }
+    // if (activeTab === 0 || activeTab === 6) { // Tab 5 no longer needs holiday fetch for UI, but dashboard might need it
+    //   if (!dataLoaded.holidays) fetchHolidays();
+    // }
     if (activeTab === 6) {
       fetchAttendanceRecordTimes();
+    }
+    if (activeTab === 7 && !dataLoaded.calendar) {
+      fetchCalendarEvents();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
@@ -117,13 +127,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordTimesDate]);
 
+  // Sync editing event to form
   useEffect(() => {
-    if (editingHoliday) {
-      setHolidayForm({ date: editingHoliday.date, description: editingHoliday.description });
+    const eventToEdit = calendarEvents.find(e => e.id === editingEventId);
+    if (eventToEdit) {
+      setNewEvent({
+        type: eventToEdit.type,
+        title: eventToEdit.title,
+        date: eventToEdit.date,
+        description: eventToEdit.description || ''
+      });
     } else {
-      setHolidayForm({ date: '', description: '' });
+      setNewEvent({ type: 'activity', title: '', date: '', description: '' });
     }
-  }, [editingHoliday]);
+  }, [editingEventId, calendarEvents]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -157,18 +174,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   };
 
 
-
-  const fetchHolidays = async () => {
-    setLoadingData(true);
-    try {
-      const q = query(collection(db, 'holidays'));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Holiday));
-      data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      setHolidays(data);
-      setDataLoaded(prev => ({ ...prev, holidays: true }));
-    } catch (e) { console.error(e); } finally { setLoadingData(false); }
-  };
 
   const fetchAttendanceRecordTimes = async () => {
     setLoadingRecordTimes(true);
@@ -253,6 +258,124 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       }
       setTimeDistribution(distribution);
     } catch (e) { console.error(e); } finally { setLoadingChart(false); }
+  };
+
+  const fetchCalendarEvents = async () => {
+    setLoadingActivities(true);
+    try {
+      // 1. Fetch School Activities
+      const qAct = query(collection(db, 'school_activities'), orderBy('date', 'desc'));
+      const snapAct = await getDocs(qAct);
+      const acts = snapAct.docs.map(d => ({
+        id: d.id,
+        type: 'activity' as const,
+        ...d.data()
+      } as any));
+
+      // 2. Fetch Holidays
+      const qHol = query(collection(db, 'holidays'));
+      const snapHol = await getDocs(qHol);
+      const hols = snapHol.docs.map(d => ({
+        id: d.id,
+        type: 'holiday' as const,
+        date: d.data().date,
+        title: d.data().description, // Map description to title for unified interface
+        description: 'วันหยุด'
+      }));
+
+      // 3. Merge and Sort
+      const merged = [...acts, ...hols].sort((a, b) => b.date.localeCompare(a.date)); // Descending for management list
+
+      setCalendarEvents(merged);
+      setDataLoaded(prev => ({ ...prev, calendar: true }));
+    } catch (e) {
+      console.error(e);
+      showToast("โหลดข้อมูลปฏิทินไม่สำเร็จ", 'error');
+    } finally {
+      setLoadingActivities(false);
+    }
+  };
+
+  const handleCalendarSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEvent.title || !newEvent.date) return showToast("กรุณากรอกข้อมูลให้ครบ", 'error');
+
+    setLoadingAction(true);
+    try {
+      if (editingEventId) {
+        // Edit Mode
+        // Determine if type changed? For simplicity assume ID is constant, but if type changed, we might need to delete old doc and create new one in different collection.
+        // HOWEVER, for this MVP let's assume one can't change TYPE easily without delete/re-add or we handle it smart.
+        // actually, let's keep it simple: Update based on original type used for ID lookup, OR simply enforce correct collection.
+
+        const originalEvent = calendarEvents.find(ev => ev.id === editingEventId);
+        if (!originalEvent) return;
+
+        if (originalEvent.type !== newEvent.type) {
+          // Type changed: Delete old, Create new
+          const oldCollection = originalEvent.type === 'holiday' ? 'holidays' : 'school_activities';
+          const newCollection = newEvent.type === 'holiday' ? 'holidays' : 'school_activities';
+
+          await deleteDoc(doc(db, oldCollection, editingEventId));
+
+          const data = newEvent.type === 'holiday'
+            ? { date: newEvent.date, description: newEvent.title } // Holiday schema
+            : { title: newEvent.title, date: newEvent.date, description: newEvent.description, createdAt: Date.now() }; // Activity schema
+
+          const newDoc = await addDoc(collection(db, newCollection), data);
+
+          setCalendarEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...newEvent, id: newDoc.id } : ev));
+        } else {
+          // Same type update
+          const collectionName = newEvent.type === 'holiday' ? 'holidays' : 'school_activities';
+          const data = newEvent.type === 'holiday'
+            ? { date: newEvent.date, description: newEvent.title }
+            : { title: newEvent.title, date: newEvent.date, description: newEvent.description };
+
+          await updateDoc(doc(db, collectionName, editingEventId), data);
+          setCalendarEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...ev, ...newEvent } : ev));
+        }
+        showToast("แก้ไขเรียบร้อย", 'success');
+
+      } else {
+        // Create Mode
+        const collectionName = newEvent.type === 'holiday' ? 'holidays' : 'school_activities';
+        const data = newEvent.type === 'holiday'
+          ? { date: newEvent.date, description: newEvent.title }
+          : { title: newEvent.title, date: newEvent.date, description: newEvent.description, createdAt: Date.now() };
+
+        const docRef = await addDoc(collection(db, collectionName), data);
+        const createdEvent = { id: docRef.id, ...newEvent };
+
+        setCalendarEvents(prev => [createdEvent, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
+        showToast("เพิ่มเรียบร้อย", 'success');
+      }
+
+      setEditingEventId(null);
+      setNewEvent({ type: 'activity', title: '', date: '', description: '' });
+
+    } catch (e) {
+      console.error(e);
+      showToast("เกิดข้อผิดพลาด", 'error');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const clickDeleteEvent = (id: string, type: 'holiday' | 'activity') => {
+    setConfirmModal({
+      isOpen: true, title: 'ลบรายการ', message: 'ยืนยันการลบ?', isDangerous: true,
+      action: async () => {
+        setLoadingAction(true);
+        try {
+          const collectionName = type === 'holiday' ? 'holidays' : 'school_activities';
+          await deleteDoc(doc(db, collectionName, id));
+          setCalendarEvents(prev => prev.filter(e => e.id !== id));
+          showToast("ลบเรียบร้อย", 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (e) { console.error(e); } finally { setLoadingAction(false); }
+      }
+    });
   };
 
   const handleAddStudent = async (e: React.FormEvent) => {
@@ -481,27 +604,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
 
 
-  const handleHolidaySubmit = async () => {
-    if (!holidayForm.date) return;
-    setLoadingAction(true);
-    try {
-      if (editingHoliday) {
-        await updateDoc(doc(db, 'holidays', editingHoliday.id), holidayForm);
-        setHolidays(prev => prev.map(h => h.id === editingHoliday.id ? { ...h, ...holidayForm } : h));
-      } else {
-        const docRef = await addDoc(collection(db, 'holidays'), holidayForm);
-        setHolidays(prev => [...prev, { id: docRef.id, ...holidayForm }].sort((a, b) => a.date.localeCompare(b.date)));
-      }
-      showToast('บันทึกวันหยุดแล้ว', 'success'); setEditingHoliday(null); setHolidayForm({ date: '', description: '' });
-    } catch (e) { showToast('Error', 'error'); } finally { setLoadingAction(false); }
-  };
 
-  const clickDeleteHoliday = (id: string) => {
-    setConfirmModal({
-      isOpen: true, title: 'ลบวันหยุด', message: 'ยืนยันการลบ?', isDangerous: true,
-      action: async () => { setLoadingAction(true); try { await deleteDoc(doc(db, 'holidays', id)); setHolidays(prev => prev.filter(h => h.id !== id)); showToast('ลบแล้ว', 'success'); setConfirmModal(prev => ({ ...prev, isOpen: false })); } catch (e) { console.error(e); } finally { setLoadingAction(false); } }
-    });
-  };
 
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
 
@@ -511,12 +614,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 2, label: 'เพิ่มนร.', icon: UserPlus },
     { id: 3, label: 'ครู', icon: UserPlus },
     { id: 4, label: 'ลบ/แก้', icon: Trash2 },
-    { id: 5, label: 'ระบบ', icon: Settings },
     { id: 6, label: 'เวลาบันทึก', icon: Clock },
+    { id: 7, label: 'ปฏิทิน', icon: CalendarDays },
   ];
 
   return (
-    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: 'linear-gradient(to left, #F7D6D0, #FFC5D0)' }}>
+    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: 'linear-gradient(to left, #E0F2FE, #CFFAFE)' }}>
 
       {/* Sidebar - Hidden on mobile */}
       <div className="hidden md:flex w-64 bg-white/60 border-r border-white/30 flex-col shrink-0">
@@ -535,11 +638,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
             </button>
           ))}
         </div>
+
+        {/* Switch to Teacher View Button at bottom */}
+        <div className="mt-auto p-4 border-t border-white/30">
+          <button
+            onClick={onSwitchToTeacherView}
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all"
+          >
+            <GraduationCap className="w-5 h-5" />
+            สลับไปมุมมองครู
+          </button>
+        </div>
       </div>
 
       {/* Content Area */}
       <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-white/30">
-        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} holidays={holidays} /></div>}
+        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} /></div>}
 
         {activeTab === 1 && (
           <div className="space-y-4 animate-fade-in">
@@ -782,58 +896,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           </div>
         )}
 
-        {activeTab === 5 && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
 
-            {/* Quick Actions */}
-            <button
-              onClick={onSwitchToTeacherView}
-              className="flex items-center justify-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl border border-emerald-200 transition-all active:scale-95 w-full"
-            >
-              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                <GraduationCap className="w-5 h-5" />
-              </div>
-              <span className="font-bold text-sm">สลับไปมุมมองครู</span>
-            </button>
-
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
-              <h3 className="font-bold mb-4 text-black flex items-center gap-2"><Calendar className="w-5 h-5 text-brand-600" /> จัดการวันหยุด</h3>
-              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <div className="relative md:w-1/3">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Calendar className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="date"
-                    className={`${INPUT_STYLE} pl-10 cursor-pointer`}
-                    value={holidayForm.date}
-                    onChange={e => setHolidayForm({ ...holidayForm, date: e.target.value })}
-                  />
-                </div>
-                <input type="text" className={`${INPUT_STYLE} flex-1`} placeholder="ชื่อวันหยุด" value={holidayForm.description} onChange={e => setHolidayForm({ ...holidayForm, description: e.target.value })} />
-                <button onClick={handleHolidaySubmit} className={BTN_SUCCESS}>{editingHoliday ? 'แก้ไข' : 'เพิ่ม'}</button>
-              </div>
-              <div className="space-y-2">
-                {holidays.map(h => (
-                  <div key={h.id} className="flex justify-between items-center p-4 bg-white border border-gray-200 rounded-xl hover:border-brand-300 hover:shadow-sm transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 font-bold text-sm flex-col leading-none border border-amber-100 shadow-sm">
-                        <span className="text-lg">{new Date(h.date).getDate()}</span>
-                        <span className="text-[10px] uppercase">{new Date(h.date).toLocaleDateString('en-US', { month: 'short' })}</span>
-                      </div>
-                      <span className="font-bold text-gray-800">{h.description}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingHoliday(h)} className="text-brand-600 hover:bg-brand-50 p-2 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => clickDeleteHoliday(h.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                ))}
-                {holidays.length === 0 && <div className="text-center text-gray-400 py-4">ไม่มีรายการวันหยุด</div>}
-              </div>
-            </div>
-          </div>
-        )}
 
         {activeTab === 6 && (
           <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
@@ -846,7 +909,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
               <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Calendar className="h-5 w-5 text-gray-400" />
+                    <CalendarDays className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
                     type="date"
@@ -893,27 +956,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                         return sortByTime === 'asc' ? aTime - bTime : bTime - aTime;
                       })
                       .map(record => {
-                        const currentHoliday = holidays.find(h => h.date === recordTimesDate);
+
                         return (
                           <tr key={record.grade} className="hover:bg-blue-50/50 transition-colors">
                             <td className="px-4 py-3 font-bold text-black">{record.grade}</td>
                             <td className="px-4 py-3 text-center">
-                              {currentHoliday ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
-                                  <Sun className="w-3 h-3" />
-                                  วันหยุด: {currentHoliday.description}
-                                </span>
-                              ) : record.timestamp ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                  <CheckCircle className="w-3 h-3" />
-                                  บันทึกแล้ว
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
-                                  <XCircle className="w-3 h-3" />
-                                  ยังไม่บันทึก
-                                </span>
-                              )}
+                              {(() => {
+                                const activeHoliday = calendarEvents.find(e => e.type === 'holiday' && e.date === recordTimesDate);
+                                if (activeHoliday) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                                      <Sun className="w-3 h-3" />
+                                      วันหยุด: {activeHoliday.title}
+                                    </span>
+                                  );
+                                }
+                                if (record.timestamp) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                      <CheckCircle className="w-3 h-3" />
+                                      บันทึกแล้ว
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                                    <XCircle className="w-3 h-3" />
+                                    ยังไม่บันทึก
+                                  </span>
+                                )
+                              })()}
                             </td>
                             <td className="px-4 py-3 text-right text-gray-600 font-mono">
                               {record.timestamp
@@ -953,7 +1025,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   <label className="text-xs font-bold text-purple-700 mb-1 block">วันเริ่มต้น</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Calendar className="h-4 w-4 text-purple-400" />
+                      <CalendarDays className="h-4 w-4 text-purple-400" />
                     </div>
                     <input
                       type="date"
@@ -967,7 +1039,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   <label className="text-xs font-bold text-purple-700 mb-1 block">วันสิ้นสุด</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Calendar className="h-4 w-4 text-purple-400" />
+                      <CalendarDays className="h-4 w-4 text-purple-400" />
                     </div>
                     <input
                       type="date"
@@ -1037,10 +1109,152 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
             </div>
           </div>
         )}
+        {activeTab === 7 && (
+          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className={`bg-white p-6 rounded-2xl border shadow-md transition-all ${editingEventId ? 'border-brand-300 ring-2 ring-brand-100' : 'border-gray-200'}`}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-black flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-indigo-600" /> {editingEventId ? 'แก้ไขรายการ' : 'เพิ่มรายการปฏิทิน'}
+                </h3>
+                {editingEventId && <button onClick={() => { setEditingEventId(null); setNewEvent({ type: 'activity', title: '', date: '', description: '' }); }} className="text-red-500 text-xs font-bold underline">ยกเลิกแก้ไข</button>}
+              </div>
+
+              <form onSubmit={handleCalendarSubmit} className="space-y-4">
+
+                {/* Type Selection */}
+                <div className="flex p-1 bg-gray-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setNewEvent({ ...newEvent, type: 'activity' })}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${newEvent.type === 'activity' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    กิจกรรม
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewEvent({ ...newEvent, type: 'holiday' })}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${newEvent.type === 'holiday' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    วันหยุด
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 mb-1 block">วันที่</label>
+                    <input
+                      type="date"
+                      required
+                      className={INPUT_STYLE}
+                      value={newEvent.date}
+                      onChange={e => setNewEvent({ ...newEvent, date: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 mb-1 block">{newEvent.type === 'holiday' ? 'ชื่อวันหยุด' : 'หัวข้อกิจกรรม'}</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={newEvent.type === 'holiday' ? "เช่น วันปีใหม่" : "เช่น กีฬาสี, ทัศนศึกษา"}
+                      className={INPUT_STYLE}
+                      value={newEvent.title}
+                      onChange={e => setNewEvent({ ...newEvent, title: e.target.value })}
+                    />
+                  </div>
+                </div>
+                {newEvent.type === 'activity' && (
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 mb-1 block">รายละเอียด (ไม่บังคับ)</label>
+                    <textarea
+                      className={INPUT_STYLE}
+                      placeholder="รายละเอียดกิจกรรม..."
+                      rows={2}
+                      value={newEvent.description}
+                      onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                <button type="submit" disabled={loadingAction} className={`${newEvent.type === 'holiday' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white w-full py-3 rounded-xl font-bold shadow-sm flex justify-center items-center`}>
+                  {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingEventId ? 'บันทึกการแก้ไข' : 'บันทึกรายการ')}
+                </button>
+              </form>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-bold text-gray-700 px-1">ปฏิทินกิจกรรมทั้งหมด</h4>
+              {loadingActivities ? (
+                <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
+              ) : calendarEvents.length === 0 ? (
+                <div className="text-center text-gray-400 py-8 bg-white/50 rounded-xl border border-gray-200 border-dashed">ไม่มีรายการ</div>
+              ) : (() => {
+                // Get today's date using local timezone (avoid toISOString which converts to UTC)
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                // Filter to show only upcoming events
+                const upcomingEvents = calendarEvents.filter(event => event.date >= todayStr);
+
+                if (upcomingEvents.length === 0) {
+                  return <div className="text-center text-gray-400 py-8 bg-white/50 rounded-xl border border-gray-200 border-dashed">ยังไม่มีรายการกิจกรรมที่จะมาถึง</div>;
+                }
+
+                return upcomingEvents.map(event => {
+                  const isHoliday = event.type === 'holiday';
+                  const eventDate = new Date(event.date);
+                  const isToday = event.date === todayStr;
+
+                  return (
+                    <div key={event.id} className={`p-4 rounded-2xl border-2 flex flex-col sm:flex-row gap-4 justify-between items-start transition-all hover:shadow-lg hover:scale-[1.01] ${isHoliday
+                      ? 'bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 shadow-orange-100/50'
+                      : 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200 shadow-indigo-100/50'
+                      } shadow-md ${isToday ? 'ring-2 ring-offset-2 ' + (isHoliday ? 'ring-orange-400' : 'ring-indigo-400') : ''}`}>
+                      <div className="flex gap-4">
+                        <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 shadow-sm ${isHoliday
+                          ? 'bg-gradient-to-br from-orange-400 to-amber-500 text-white'
+                          : 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
+                          }`}>
+                          <span className="text-2xl font-bold leading-none">{eventDate.getDate()}</span>
+                          <span className="text-[10px] uppercase font-bold opacity-90">{eventDate.toLocaleDateString('th-TH', { month: 'short' })}</span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h5 className="font-bold text-lg text-gray-800">{event.title}</h5>
+                            {isHoliday && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm">วันหยุด</span>}
+                            {isToday && <span className="bg-emerald-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold animate-pulse shadow-sm">วันนี้</span>}
+                          </div>
+
+                          {event.description && event.description !== 'วันหยุด' && <p className="text-sm text-gray-500 line-clamp-2 mt-1">{event.description}</p>}
+                          <p className="text-xs text-gray-400 mt-2 font-medium">{eventDate.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 self-end sm:self-center">
+                        <button
+                          onClick={() => setEditingEventId(event.id)}
+                          className={`p-2.5 rounded-xl transition-all ${isHoliday ? 'text-orange-500 hover:bg-orange-100' : 'text-indigo-500 hover:bg-indigo-100'}`}
+                          title="แก้ไข"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => clickDeleteEvent(event.id, event.type)}
+                          className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-all"
+                          title="ลบ"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <AdminBottomNav activeTab={activeTab} onTabChange={setActiveTab} onLogout={onLogout} />
+      <AdminBottomNav activeTab={activeTab} onTabChange={setActiveTab} onLogout={onLogout} onSwitchToTeacherView={onSwitchToTeacherView} />
 
       {/* Edit Student Modal */}
       {editingStudent && createPortal(

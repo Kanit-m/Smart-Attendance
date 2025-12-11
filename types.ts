@@ -70,6 +70,15 @@ export interface Holiday {
   description: string;
 }
 
+
 export interface SchoolSettings {
   logoUrl: string;
+}
+
+export interface SchoolActivity {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  description: string;
+  createdAt: number;
 }

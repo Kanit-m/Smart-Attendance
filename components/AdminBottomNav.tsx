@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Users, Plus, Settings, UserPlus, GraduationCap, Pencil, LogOut, Clock } from 'lucide-react';
+import { Home, Users, Plus, UserPlus, GraduationCap, Pencil, LogOut, Clock, CalendarDays } from 'lucide-react';
 
 interface AdminBottomNavProps {
     activeTab: number;
     onTabChange: (tab: number) => void;
     onLogout: () => void;
+    onSwitchToTeacherView?: () => void;
 }
 
 interface SpeedDialItem {
@@ -19,6 +20,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
     activeTab,
     onTabChange,
     onLogout,
+    onSwitchToTeacherView,
 }) => {
     const [isSpeedDialOpen, setIsSpeedDialOpen] = useState(false);
 
@@ -27,15 +29,20 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
         { id: 3, label: 'เพิ่มครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-emerald-500' },
         { id: 4, label: 'ลบ/แก้ไข', icon: <Pencil className="w-5 h-5" />, color: 'bg-amber-500' },
         { id: 6, label: 'เวลาบันทึก', icon: <Clock className="w-5 h-5" />, color: 'bg-purple-500' },
+        { id: -1, label: 'มุมมองครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-teal-500' },
     ];
 
     const handleSpeedDialItemClick = (tabId: number) => {
         setIsSpeedDialOpen(false);
-        onTabChange(tabId);
+        if (tabId === -1 && onSwitchToTeacherView) {
+            onSwitchToTeacherView();
+        } else {
+            onTabChange(tabId);
+        }
     };
 
     // Check if current tab is one of the speed dial tabs
-    const isSpeedDialTabActive = [2, 3, 4, 6].includes(activeTab);
+    const isSpeedDialTabActive = [2, 3, 4, 6, 7].includes(activeTab);
 
     // Use portal to render at body level (fixes fixed positioning inside overflow containers)
     return createPortal(
@@ -55,10 +62,9 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                         key={item.id}
                         className="flex flex-col items-center gap-1"
                         style={{
-                            transitionDelay: isSpeedDialOpen ? `${index * 60}ms` : '0ms',
                             transform: isSpeedDialOpen ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.5)',
                             opacity: isSpeedDialOpen ? 1 : 0,
-                            transition: 'all 0.3s ease-out',
+                            transition: `all 0.3s ease-out ${isSpeedDialOpen ? index * 60 : 0}ms`,
                         }}
                     >
                         <button
@@ -84,7 +90,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                         {/* หน้าแรก */}
                         <button
                             onClick={() => { setIsSpeedDialOpen(false); onTabChange(0); }}
-                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 0 ? 'text-white bg-[#821D30]' : 'text-gray-400'}`}
+                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 0 ? 'text-white bg-teal-600' : 'text-gray-400'}`}
                         >
                             <Home className={`w-5 h-5 ${activeTab === 0 ? 'scale-110' : ''} transition-transform`} />
                             <span className="text-[10px] font-medium">หน้าแรก</span>
@@ -93,7 +99,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                         {/* รายชื่อ */}
                         <button
                             onClick={() => { setIsSpeedDialOpen(false); onTabChange(1); }}
-                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 1 ? 'text-white bg-[#821D30]' : 'text-gray-400'}`}
+                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 1 ? 'text-white bg-teal-600' : 'text-gray-400'}`}
                         >
                             <Users className={`w-5 h-5 ${activeTab === 1 ? 'scale-110' : ''} transition-transform`} />
                             <span className="text-[10px] font-medium">รายชื่อ</span>
@@ -109,8 +115,8 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                   ${isSpeedDialOpen
                                         ? 'bg-gray-800 rotate-45 scale-105'
                                         : isSpeedDialTabActive
-                                            ? 'bg-[#821D30] scale-105 ring-2 ring-[#FB6090] ring-offset-2'
-                                            : 'bg-[#821D30] hover:scale-105'
+                                            ? 'bg-teal-600 scale-105 ring-2 ring-teal-400 ring-offset-2'
+                                            : 'bg-teal-600 hover:scale-105'
                                     }
                 `}
                             >
@@ -118,13 +124,13 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                             </button>
                         </div>
 
-                        {/* ตั้งค่า */}
+                        {/* ปฏิทิน */}
                         <button
-                            onClick={() => { setIsSpeedDialOpen(false); onTabChange(5); }}
-                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 5 ? 'text-white bg-[#821D30]' : 'text-gray-400'}`}
+                            onClick={() => { setIsSpeedDialOpen(false); onTabChange(7); }}
+                            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] ${activeTab === 7 ? 'text-white bg-teal-600' : 'text-gray-400'}`}
                         >
-                            <Settings className={`w-5 h-5 ${activeTab === 5 ? 'scale-110' : ''} transition-transform`} />
-                            <span className="text-[10px] font-medium">ตั้งค่า</span>
+                            <CalendarDays className={`w-5 h-5 ${activeTab === 7 ? 'scale-110' : ''} transition-transform`} />
+                            <span className="text-[10px] font-medium">ปฏิทิน</span>
                         </button>
 
                         {/* ออกจากระบบ */}
