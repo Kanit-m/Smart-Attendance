@@ -474,7 +474,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     );
 
     return (
-        <div className={containerClass}>
+        <div
+            className={containerClass}
+            style={{
+                backgroundImage: 'url(/circle-scatter-haikei.svg)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+            }}
+        >
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
                 <div>
