@@ -97,6 +97,24 @@ export const PrintReportPage: React.FC = () => {
         if (date) fetchData();
     }, [date, isInitialized]);
 
+    // Auto-refresh when user returns to the page (visibility change)
+    useEffect(() => {
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible' && isInitialized) {
+                // Clear student cache and reload fresh data
+                localStorage.removeItem(STUDENTS_CACHE_KEY);
+                const studentsData = await loadStudents();
+                setStudents(studentsData);
+                // Also refresh attendance
+                const attendanceData = await loadAttendance(date, true);
+                setAttendances(attendanceData);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [date, isInitialized]);
+
     // Calculate missing classes
     const missingClasses = useMemo(() => {
         const grades = [...new Set<string>(students.map(s => s.grade))];

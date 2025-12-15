@@ -111,17 +111,35 @@ function App() {
     try {
       const CACHE_KEY = 'cached_students';
       const TIME_KEY = 'cached_students_time';
+      const VERSION_KEY = 'cached_students_version';
       const CACHE_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days
 
       const cachedData = localStorage.getItem(CACHE_KEY);
       const cachedTime = localStorage.getItem(TIME_KEY);
+      const cachedVersion = localStorage.getItem(VERSION_KEY);
       const now = Date.now();
 
+      // Check version from Firestore if not forcing refresh
       if (!force && cachedData && cachedTime) {
-        const age = now - parseInt(cachedTime);
-        if (age < CACHE_DURATION) {
-          setStudents(JSON.parse(cachedData));
-          return;
+        try {
+          const versionDoc = await getDoc(doc(db, 'metadata', 'students'));
+          const serverVersion = versionDoc.exists() ? versionDoc.data()?.lastUpdated : 0;
+
+          // If server version matches local, use cache
+          if (cachedVersion && parseInt(cachedVersion) >= serverVersion) {
+            const age = now - parseInt(cachedTime);
+            if (age < CACHE_DURATION) {
+              setStudents(JSON.parse(cachedData));
+              return;
+            }
+          }
+        } catch (e) {
+          // If version check fails, still try to use cache
+          const age = now - parseInt(cachedTime);
+          if (age < CACHE_DURATION) {
+            setStudents(JSON.parse(cachedData));
+            return;
+          }
         }
       }
 
@@ -131,10 +149,11 @@ function App() {
 
       setStudents(data);
 
-      // Save to cache
+      // Save to cache with current timestamp as version
       try {
         localStorage.setItem(CACHE_KEY, JSON.stringify(data));
         localStorage.setItem(TIME_KEY, now.toString());
+        localStorage.setItem(VERSION_KEY, now.toString());
         if (force) alert("อัปเดตข้อมูลเรียบร้อยแล้ว");
       } catch (err) {
         console.error("Failed to save student cache", err);
@@ -149,6 +168,19 @@ function App() {
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  // Auto-refresh students when user returns to the page (visibility change)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        // Silently check for updates without forcing
+        fetchStudents(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchStudents, currentUser]);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
     // Sanitize input: Remove ALL whitespace and convert to lowercase

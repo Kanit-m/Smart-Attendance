@@ -59,6 +59,15 @@ const clearActivitiesCache = () => {
   localStorage.removeItem(ACTIVITIES_TIME_KEY);
 };
 
+// Update student version timestamp in Firestore (triggers other clients to refresh)
+const updateStudentVersion = async () => {
+  try {
+    await setDoc(doc(db, 'metadata', 'students'), { lastUpdated: Date.now() });
+  } catch (e) {
+    console.error('Failed to update student version', e);
+  }
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout, onStudentChange }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
@@ -411,6 +420,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       showToast('เพิ่มสำเร็จ', 'success');
       setNewStudent({ studentId: '', number: 0, name: '', grade: GRADE_OPTIONS[0], gender: Gender.MALE });
       if (activeTab === 1 || activeTab === 4) fetchStudents();
+      onStudentChange?.(); // Trigger cache refresh for all clients
+      updateStudentVersion(); // Update version in Firestore
     } catch (err) { console.error(err); showToast('เกิดข้อผิดพลาด', 'error'); }
     finally { setLoadingAction(false); }
   };
@@ -448,6 +459,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         showToast(`นำเข้า ${count} รายการ`, 'success');
         setCsvFile(null);
         fetchStudents();
+        onStudentChange?.();
+        updateStudentVersion();
       } catch (error) { console.error(error); showToast("CSV Error", 'error'); } finally { setLoadingAction(false); }
     };
     reader.readAsText(csvFile);
@@ -458,7 +471,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       isOpen: true, title: 'ลบนักเรียน', message: `ลบข้อมูล "${name}" ใช่หรือไม่?`, isDangerous: true,
       action: async () => {
         setLoadingAction(true);
-        try { await deleteDoc(doc(db, 'students', id)); setStudents(prev => prev.filter(s => s.id !== id)); showToast('ลบเรียบร้อย', 'success'); setConfirmModal(prev => ({ ...prev, isOpen: false })); }
+        try {
+          await deleteDoc(doc(db, 'students', id));
+          setStudents(prev => prev.filter(s => s.id !== id));
+          showToast('ลบเรียบร้อย', 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onStudentChange?.();
+          updateStudentVersion();
+        }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); } finally { setLoadingAction(false); }
       }
     });
@@ -477,7 +497,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.WITHDRAWN, withdrawnAt: Date.now() } : s));
           showToast(`${name} ถูกบันทึกเป็น "ลาออก"`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          onStudentChange?.(); // Trigger cache refresh
+          onStudentChange?.();
+          updateStudentVersion();
         }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
         finally { setLoadingAction(false); }
@@ -498,7 +519,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setStudents(prev => prev.map(s => s.id === id ? { ...s, status: StudentStatus.ACTIVE, withdrawnAt: undefined } : s));
           showToast(`${name} กลับมาเป็นนักเรียนปกติแล้ว`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          onStudentChange?.(); // Trigger cache refresh
+          onStudentChange?.();
+          updateStudentVersion();
         }
         catch (e: any) { showToast(`Error: ${e.message}`, 'error'); }
         finally { setLoadingAction(false); }
@@ -522,6 +544,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           setSelectedDeleteGrade('');
           showToast(`ลบเรียบร้อย`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onStudentChange?.();
+          updateStudentVersion();
         } catch (e: any) { showToast(`Error: ${e.message}`, 'error'); } finally { setLoadingAction(false); }
       }
     });
@@ -975,9 +999,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                     {[...attendanceRecords]
                       .sort((a, b) => {
                         if (!sortByTime) return 0;
-                        const aTime = a.timestamp || 0;
-                        const bTime = b.timestamp || 0;
-                        return sortByTime === 'asc' ? aTime - bTime : bTime - aTime;
+                        // Sort by time of day (minutes since midnight) instead of full timestamp
+                        const getMinutesSinceMidnight = (ts: number | null) => {
+                          if (!ts) return sortByTime === 'asc' ? Infinity : -Infinity; // Put null timestamps at the end
+                          const date = new Date(ts);
+                          return date.getHours() * 60 + date.getMinutes();
+                        };
+                        const aMinutes = getMinutesSinceMidnight(a.timestamp);
+                        const bMinutes = getMinutesSinceMidnight(b.timestamp);
+                        return sortByTime === 'asc' ? aMinutes - bMinutes : bMinutes - aMinutes;
                       })
                       .map(record => {
 
