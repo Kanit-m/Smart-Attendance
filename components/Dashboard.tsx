@@ -790,48 +790,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             )}
 
             {/* Top Stats Grid - Smart Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-                {/* Card 0: Submission Status or Holiday */}
-                {!isSchoolDay ? (
-                    // HOLIDAY CARD
-                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-3 md:p-6 shadow-md border border-orange-200 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                        <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-orange-100 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110"></div>
-                        <div className="relative z-10">
-                            <p className="text-orange-600 text-xs md:text-sm font-bold mb-0.5 md:mb-1">วันหยุด</p>
-                            <div className="flex items-baseline gap-1 md:gap-2">
-                                <h3 className="text-sm md:text-lg font-bold text-orange-700 leading-tight">
-                                    {todayHoliday ? todayHoliday.description : 'วันหยุดสุดสัปดาห์'}
-                                </h3>
-                            </div>
-                            <p className="text-[10px] text-orange-500 mt-1">ไม่มีการบันทึก</p>
-                        </div>
-                        <div className="relative z-10 p-2 md:p-3 rounded-xl bg-orange-100 text-orange-600">
-                            <Sun className="w-5 h-5 md:w-8 md:h-8" />
-                        </div>
-                    </div>
-                ) : (
-                    // SCHOOL DAY - SUBMISSION STATUS CARD
-                    <div className="bg-white rounded-2xl p-3 md:p-6 shadow-md border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-lg transition-all">
-                        <div className={`absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4 transition-transform group-hover:scale-110 ${isAllSubmitted ? 'bg-emerald-50' : 'bg-amber-50'}`}></div>
-                        <div className="relative z-10">
-                            <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">สถานะบันทึก</p>
-                            <div className="flex items-baseline gap-1 md:gap-2">
-                                <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-500'}`}>
-                                    {submittedClasses}<span className="text-lg md:text-2xl text-gray-400">/{totalClasses}</span>
-                                </h3>
-                            </div>
-                            <div className="mt-1 md:mt-2 w-full bg-gray-100 rounded-full h-1 md:h-1.5">
-                                <div
-                                    className={`h-1 md:h-1.5 rounded-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                    style={{ width: `${totalClasses > 0 ? (submittedClasses / totalClasses) * 100 : 0}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                        <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                            <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
-                        </div>
-                    </div>
-                )}
+            <div className="grid grid-cols-3 gap-3 md:gap-6">
                 {/* Card 1: Total Students - Flip Card */}
                 <div
                     className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['students'] ? 'flipped' : ''}`}
@@ -972,12 +931,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                             </div>
                                         )}
                                     </div>
-                                    <div className={`w-12 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
+                                    <div className={`w-10 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
                                         isGood ? 'text-emerald-600' :
                                             isWarning ? 'text-amber-600' :
                                                 'text-rose-600'
                                         }`}>
                                         {stat.isSubmitted ? `${rate.toFixed(0)}%` : '-'}
+                                    </div>
+                                    <div className="w-24 text-right text-[10px] font-medium text-gray-600">
+                                        <span className="font-bold text-gray-700">{stat.total}</span> (ช {stat.male}/ญ {stat.female})
                                     </div>
                                 </div>
                             );
