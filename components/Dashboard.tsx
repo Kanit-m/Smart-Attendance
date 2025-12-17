@@ -790,7 +790,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             )}
 
             {/* Top Stats Grid - Smart Cards */}
-            <div className="grid grid-cols-3 gap-3 md:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
                 {/* Card 1: Total Students - Flip Card */}
                 <div
                     className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['students'] ? 'flipped' : ''}`}
@@ -881,6 +881,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                             <p className="text-xs md:text-sm font-bold mb-2 opacity-90">อัตราการขาดเรียน</p>
                             <div className="text-3xl md:text-5xl font-bold">{totalStudents > 0 ? ((totalAbsent / totalStudents) * 100).toFixed(1) : 0}%</div>
                             <p className="text-[10px] md:text-xs opacity-80 mt-1">{totalAbsent} จาก {totalStudents} คน</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Card 4: Classes Submitted - Flip Card */}
+                <div
+                    className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['classes'] ? 'flipped' : ''}`}
+                    onClick={() => toggleFlip('classes')}
+                >
+                    <div className="flip-card-inner">
+                        {/* Front */}
+                        <div className="flip-card-front bg-white border border-gray-100 p-3 md:p-6 flex items-center justify-between relative overflow-hidden">
+                            <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-indigo-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4"></div>
+                            <div className="relative z-10 text-left">
+                                <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">ห้องที่บันทึก</p>
+                                <div className="flex items-baseline gap-1 md:gap-2">
+                                    <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-indigo-600' : 'text-amber-600'}`}>{submittedClasses}</h3>
+                                    <span className="text-sm md:text-lg font-bold text-gray-400">/ {totalClasses}</span>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">{isAllSubmitted ? 'ครบแล้ว ✓' : 'รอบันทึก'}</p>
+                            </div>
+                            <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'}`}>
+                                <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
+                            </div>
+                        </div>
+                        {/* Back */}
+                        <div className={`flip-card-back border p-3 md:p-6 flex flex-col justify-center items-center text-white ${isAllSubmitted ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 border-indigo-400' : 'bg-gradient-to-br from-amber-500 to-amber-600 border-amber-400'}`}>
+                            <p className="text-xs md:text-sm font-bold mb-2 opacity-90">{isAllSubmitted ? 'บันทึกครบแล้ว!' : 'รอบันทึกจาก'}</p>
+                            {isAllSubmitted ? (
+                                <div className="text-3xl md:text-5xl font-bold">✓</div>
+                            ) : (
+                                <div className="text-center">
+                                    <div className="text-xs md:text-sm font-medium leading-relaxed">
+                                        {missingClasses.slice(0, 3).map(c => c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')).join(', ')}
+                                        {missingClasses.length > 3 && ` +${missingClasses.length - 3}`}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
