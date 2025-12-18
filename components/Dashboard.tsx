@@ -594,12 +594,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                     <h3 className={`font-bold text-lg ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
                                         {isAllSubmitted ? '✅ บันทึกครบทุกห้องแล้ว!' : `📊 บันทึกแล้ว ${submittedClasses}/${totalClasses} ห้อง`}
                                     </h3>
-                                    <p className={`text-sm ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-700'}`}>
-                                        {isAllSubmitted
-                                            ? 'ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้'
-                                            : `รอข้อมูลจาก: ${missingClasses.map(c => c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')).join(', ')}`
-                                        }
-                                    </p>
+                                    {isAllSubmitted ? (
+                                        <p className="text-sm text-emerald-600">ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้</p>
+                                    ) : (
+                                        <div className="text-sm text-amber-700">
+                                            <span>รอข้อมูลจาก:</span>
+                                            <div className="flex flex-col gap-0.5 mt-1 text-xs font-medium text-amber-800">
+                                                {missingClasses.map(c => (
+                                                    <span key={c.grade}>• {c.grade}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className={`text-3xl font-bold ${isAllSubmitted ? 'text-emerald-500' : 'text-amber-500'}`}>
@@ -913,9 +919,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                 <div className="text-3xl md:text-5xl font-bold">✓</div>
                             ) : (
                                 <div className="text-center">
-                                    <div className="text-xs md:text-sm font-medium leading-relaxed">
-                                        {missingClasses.slice(0, 3).map(c => c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')).join(', ')}
-                                        {missingClasses.length > 3 && ` +${missingClasses.length - 3}`}
+                                    <div className="flex flex-col gap-0.5 text-xs md:text-sm font-medium">
+                                        {missingClasses.slice(0, 4).map(c => (
+                                            <span key={c.grade}>• {c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')}</span>
+                                        ))}
+                                        {missingClasses.length > 4 && <span className="opacity-70">+{missingClasses.length - 4} ห้อง</span>}
                                     </div>
                                 </div>
                             )}
