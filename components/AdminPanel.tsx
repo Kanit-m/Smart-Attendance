@@ -1255,7 +1255,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
                 return upcomingEvents.map(event => {
                   const isHoliday = event.type === 'holiday';
-                  const eventDate = new Date(event.date);
+                  // Parse date correctly for local timezone (avoid UTC interpretation of ISO string)
+                  const [year, month, day] = event.date.split('-').map(Number);
+                  const eventDate = new Date(year, month - 1, day);
                   const isToday = event.date === todayStr;
 
                   return (
