@@ -719,7 +719,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                 {(() => {
                                     const now = new Date();
                                     now.setHours(0, 0, 0, 0);
-                                    const todayStr = now.toISOString().split('T')[0];
+                                    // Use local timezone for todayStr (not toISOString which is UTC)
+                                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
                                     // Find meaningful "next" or "today" event
                                     const todayItem = calendarItems.find(i => i.date === todayStr);
@@ -736,9 +737,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                         // Parse date correctly for local timezone
                                         const [nY, nM, nD] = nextItem.date.split('-').map(Number);
                                         const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                        // Show "วันนี้" if 0 days, "พรุ่งนี้" if 1 day, otherwise "อีก X วัน"
+                                        const daysText = days === 0 ? 'วันนี้' : days === 1 ? 'พรุ่งนี้' : `อีก ${days} วัน`;
                                         return (
                                             <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {nextItem.title} (อีก {days} วัน)
+                                                <Clock className="w-3 h-3" /> {nextItem.title} ({daysText})
                                             </p>
                                         );
                                     }
