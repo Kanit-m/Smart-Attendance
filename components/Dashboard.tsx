@@ -705,50 +705,75 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                         onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
                         className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="bg-brand-100 p-2 rounded-full">
-                                <CalendarDays className="w-5 h-5 text-brand-600" />
-                            </div>
-                            <div className="text-left">
-                                <h3 className="font-bold text-gray-900 text-sm">
-                                    ปฏิทินโรงเรียน
-                                    <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
-                                        {calendarItems.length} รายการ
-                                    </span>
-                                </h3>
-                                {(() => {
-                                    const now = new Date();
-                                    now.setHours(0, 0, 0, 0);
-                                    // Use local timezone for todayStr (not toISOString which is UTC)
-                                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        {(() => {
+                            const now = new Date();
+                            now.setHours(0, 0, 0, 0);
+                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                            const todayItem = calendarItems.find(i => i.date === todayStr);
 
-                                    // Find meaningful "next" or "today" event
-                                    const todayItem = calendarItems.find(i => i.date === todayStr);
-                                    if (todayItem) {
-                                        return (
-                                            <p className={`text-xs font-medium flex items-center gap-1 ${todayItem.type === 'holiday' ? 'text-orange-600' : 'text-indigo-600'}`}>
-                                                <Sun className="w-3 h-3" /> วันนี้: {todayItem.title}
+                            // If collapsed and has today's event, show it prominently
+                            if (!isActivitiesExpanded && todayItem) {
+                                const isHoliday = todayItem.type === 'holiday';
+                                return (
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-full ${isHoliday ? 'bg-orange-100' : 'bg-indigo-100'}`}>
+                                            {isHoliday ? (
+                                                <Sun className={`w-5 h-5 text-orange-600`} />
+                                            ) : (
+                                                <CalendarDays className={`w-5 h-5 text-indigo-600`} />
+                                            )}
+                                        </div>
+                                        <div className="text-left">
+                                            <h3 className={`font-bold text-lg ${isHoliday ? 'text-orange-700' : 'text-indigo-700'}`}>
+                                                {todayItem.title}
+                                            </h3>
+                                            <p className={`text-xs font-medium ${isHoliday ? 'text-orange-500' : 'text-indigo-500'}`}>
+                                                📍 วันนี้ {todayItem.description && todayItem.description !== 'วันหยุด' ? `• ${todayItem.description}` : ''}
                                             </p>
-                                        );
-                                    }
+                                        </div>
+                                    </div>
+                                );
+                            }
 
-                                    const nextItem = calendarItems.find(i => i.date > todayStr);
-                                    if (nextItem) {
-                                        // Parse date correctly for local timezone
-                                        const [nY, nM, nD] = nextItem.date.split('-').map(Number);
-                                        const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                                        // Show "วันนี้" if 0 days, "พรุ่งนี้" if 1 day, otherwise "อีก X วัน"
-                                        const daysText = days === 0 ? 'วันนี้' : days === 1 ? 'พรุ่งนี้' : `อีก ${days} วัน`;
-                                        return (
-                                            <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {nextItem.title} ({daysText})
-                                            </p>
-                                        );
-                                    }
-                                    return <p className="text-xs text-gray-400">ไม่มีรายการเร็วๆ นี้</p>;
-                                })()}
-                            </div>
-                        </div>
+                            // Default view (expanded or no today event)
+                            return (
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-brand-100 p-2 rounded-full">
+                                        <CalendarDays className="w-5 h-5 text-brand-600" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="font-bold text-gray-900 text-sm">
+                                            ปฏิทินโรงเรียน
+                                            <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                                                {calendarItems.length} รายการ
+                                            </span>
+                                        </h3>
+                                        {(() => {
+                                            if (todayItem) {
+                                                return (
+                                                    <p className={`text-xs font-medium flex items-center gap-1 ${todayItem.type === 'holiday' ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                                        <Sun className="w-3 h-3" /> วันนี้: {todayItem.title}
+                                                    </p>
+                                                );
+                                            }
+
+                                            const nextItem = calendarItems.find(i => i.date > todayStr);
+                                            if (nextItem) {
+                                                const [nY, nM, nD] = nextItem.date.split('-').map(Number);
+                                                const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                                const daysText = days === 0 ? 'วันนี้' : days === 1 ? 'พรุ่งนี้' : `อีก ${days} วัน`;
+                                                return (
+                                                    <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" /> {nextItem.title} ({daysText})
+                                                    </p>
+                                                );
+                                            }
+                                            return <p className="text-xs text-gray-400">ไม่มีรายการเร็วๆ นี้</p>;
+                                        })()}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         {isActivitiesExpanded ? (
                             <ChevronUp className="w-5 h-5 text-gray-400" />
                         ) : (
