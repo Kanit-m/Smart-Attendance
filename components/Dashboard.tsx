@@ -164,7 +164,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 const currentYear = today.getFullYear();
 
                 const relevantActs = acts.filter(a => {
-                    const actDate = new Date(a.date);
+                    // Parse date correctly for local timezone
+                    const [y, m, d] = a.date.split('-').map(Number);
+                    const actDate = new Date(y, m - 1, d);
                     return a.date >= todayStr && actDate.getMonth() === currentMonth && actDate.getFullYear() === currentYear;
                 }).map(a => ({
                     type: 'activity' as const,
@@ -176,7 +178,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                 // Merge with upcoming holidays (from today onwards, current month only)
                 const relevantHolidays = holidays!.filter(h => {
-                    const hDate = new Date(h.date);
+                    // Parse date correctly for local timezone
+                    const [y, m, d] = h.date.split('-').map(Number);
+                    const hDate = new Date(y, m - 1, d);
                     return h.date >= todayStr && hDate.getMonth() === currentMonth && hDate.getFullYear() === currentYear;
                 }).map(h => ({
                     type: 'holiday' as const,
@@ -636,7 +640,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                 // Find events in the next 3 days (excluding today)
                 const upcomingAlerts = calendarItems.filter(item => {
-                    const eventDate = new Date(item.date);
+                    // Parse date correctly for local timezone
+                    const [y, m, d] = item.date.split('-').map(Number);
+                    const eventDate = new Date(y, m - 1, d);
                     const diffDays = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                     return diffDays > 0 && diffDays <= 3;
                 });
@@ -645,7 +651,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                 // Get the most urgent alert (soonest)
                 const urgentAlert = upcomingAlerts[0];
-                const alertDate = new Date(urgentAlert.date);
+                // Parse date correctly for local timezone
+                const [aY, aM, aD] = urgentAlert.date.split('-').map(Number);
+                const alertDate = new Date(aY, aM - 1, aD);
                 const daysUntil = Math.ceil((alertDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                 const isTomorrow = urgentAlert.date === tomorrowStr;
                 const isHoliday = urgentAlert.type === 'holiday';
@@ -725,7 +733,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                                     const nextItem = calendarItems.find(i => i.date > todayStr);
                                     if (nextItem) {
-                                        const days = Math.ceil((new Date(nextItem.date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                        // Parse date correctly for local timezone
+                                        const [nY, nM, nD] = nextItem.date.split('-').map(Number);
+                                        const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                                         return (
                                             <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
                                                 <Clock className="w-3 h-3" /> {nextItem.title} (อีก {days} วัน)
@@ -747,8 +757,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                         <div className="px-4 pb-3 border-t border-gray-100">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
                                 {calendarItems.map((item) => {
-                                    const itemDate = new Date(item.date);
-                                    const isToday = item.date === new Date().toISOString().split('T')[0];
+                                    // Parse date correctly for local timezone
+                                    const [iY, iM, iD] = item.date.split('-').map(Number);
+                                    const itemDate = new Date(iY, iM - 1, iD);
+                                    const nowLocal = new Date();
+                                    const todayStrLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+                                    const isToday = item.date === todayStrLocal;
                                     const isHoliday = item.type === 'holiday';
 
                                     // Activity Styles (Blue/Indigo) vs Holiday Styles (Orange/Amber)
