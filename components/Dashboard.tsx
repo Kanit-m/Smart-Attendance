@@ -1,11 +1,11 @@
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import {
-    Users, UserCheck, UserX, Sun,
+    UserCheck, UserX, Sun,
     ChevronRight, ChevronLeft, LayoutGrid,
     Baby, BookOpen, Activity,
     ClipboardCheck, AlertTriangle, Clock, Printer,
-    ChevronDown, ChevronUp, CalendarCheck, CalendarDays
+    ChevronDown, ChevronUp, CalendarDays
 } from 'lucide-react';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore/lite';
 import { db } from '../firebase';
@@ -47,13 +47,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     const [pIndex, setPIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
 
-    // Flip Card State for mobile tap toggle
-    const [flippedCards, setFlippedCards] = useState<{ [key: string]: boolean }>({});
-    const toggleFlip = useCallback((cardId: string) => {
-        setFlippedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }));
-    }, []);
-
-
 
     // Touch State for Swipe
     const [touchStart, setTouchStart] = useState(0);
@@ -62,9 +55,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     // Report Modal State
     const [showReportModal, setShowReportModal] = useState(false);
 
-    // Holidays Collapsible State - REMOVED (Merged into Calendar)
-    // Activities State - REMOVED (Merged into Calendar)
-    // Reusing isActivitiesExpanded for the new Calendar Section to avoid renaming everything now
+    // Scroll Animation State - Multiple Sections
+    const chartRef = useRef<HTMLDivElement>(null);
+    const calendarRef = useRef<HTMLDivElement>(null);
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const absentRef = useRef<HTMLDivElement>(null);
+
+    const [isChartVisible, setIsChartVisible] = useState(false);
+    const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+    const [isCarouselVisible, setIsCarouselVisible] = useState(false);
+    const [isAbsentVisible, setIsAbsentVisible] = useState(false);
+
+    // Calendar Section Expanded State
     const [isActivitiesExpanded, setIsActivitiesExpanded] = useState(true);
 
     // Use parent holidays if provided, otherwise cache locally
@@ -89,6 +91,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     useEffect(() => {
         fetchData(currentDate);
     }, [currentDate]); // Only re-fetch when date changes
+
+    // Intersection Observer for scroll animation - All Sections
+    useEffect(() => {
+        // Reset all animations when loading starts
+        if (loading) {
+            setIsChartVisible(false);
+            setIsCalendarVisible(false);
+            setIsCarouselVisible(false);
+            setIsAbsentVisible(false);
+            return;
+        }
+
+        // Delay to ensure animations are visible
+        const timer = setTimeout(() => {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            const target = entry.target as HTMLElement;
+                            const sectionId = target.dataset.section;
+
+                            if (sectionId === 'chart') setIsChartVisible(true);
+                            if (sectionId === 'calendar') setIsCalendarVisible(true);
+                            if (sectionId === 'carousel') setIsCarouselVisible(true);
+                            if (sectionId === 'absent') setIsAbsentVisible(true);
+                        }
+                    });
+                },
+                { threshold: 0.2 }
+            );
+
+            // Observe all sections
+            if (chartRef.current) observer.observe(chartRef.current);
+            if (calendarRef.current) observer.observe(calendarRef.current);
+            if (carouselRef.current) observer.observe(carouselRef.current);
+            if (absentRef.current) observer.observe(absentRef.current);
+
+            return () => observer.disconnect();
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [loading]);
 
     const fetchData = async (targetDate: string) => {
         setLoading(true);
@@ -700,7 +744,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
             {/* Combined School Calendar Section */}
             {calendarItems.length > 0 && (
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden animate-slide-up">
+                <div ref={calendarRef} data-section="calendar" className={`bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-all duration-1000 ${isCalendarVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
                     <button
                         onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
                         className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -837,247 +881,212 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 </div>
             )}
 
-            {/* Top Stats Grid - Smart Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                {/* Card 1: Total Students - Flip Card */}
-                <div
-                    className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['students'] ? 'flipped' : ''}`}
-                    onClick={() => toggleFlip('students')}
-                >
-                    <div className="flip-card-inner">
-                        {/* Front */}
-                        <div className="flip-card-front bg-white border border-gray-100 p-3 md:p-6 flex items-center justify-between relative overflow-hidden">
-                            <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-blue-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4"></div>
-                            <div className="relative z-10 text-left">
-                                <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">นักเรียนทั้งหมด</p>
-                                <h3 className="text-2xl md:text-4xl font-bold text-black">{totalStudents}</h3>
-                                <p className="text-[10px] text-gray-400 mt-1">แตะเพื่อดูรายละเอียด</p>
-                            </div>
-                            <div className="relative z-10 bg-blue-100 p-2 md:p-3 rounded-xl text-blue-600">
-                                <Users className="w-5 h-5 md:w-8 md:h-8" />
-                            </div>
-                        </div>
-                        {/* Back */}
-                        <div className="flip-card-back bg-gradient-to-br from-blue-500 to-blue-600 border border-blue-400 p-3 md:p-6 flex flex-col justify-center items-center text-white">
-                            <p className="text-xs md:text-sm font-bold mb-2 opacity-90">รายละเอียดนักเรียน</p>
-                            <div className="flex gap-4">
-                                <div className="text-center">
-                                    <div className="text-xl md:text-3xl font-bold">{totalMale}</div>
-                                    <div className="text-[10px] md:text-xs opacity-80">ชาย</div>
-                                </div>
-                                <div className="text-center">
-                                    <div className="text-xl md:text-3xl font-bold">{totalFemale}</div>
-                                    <div className="text-[10px] md:text-xs opacity-80">หญิง</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Card 2: Present - Flip Card */}
-                <div
-                    className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['present'] ? 'flipped' : ''}`}
-                    onClick={() => toggleFlip('present')}
-                >
-                    <div className="flip-card-inner">
-                        {/* Front */}
-                        <div className="flip-card-front bg-white border border-gray-100 p-3 md:p-6 flex items-center justify-between relative overflow-hidden">
-                            <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-emerald-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4"></div>
-                            <div className="relative z-10 text-left">
-                                <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">มาเรียน</p>
-                                <div className="flex items-baseline gap-1 md:gap-2">
-                                    <h3 className="text-2xl md:text-4xl font-bold text-emerald-600">{totalPresent}</h3>
-                                    <span className="text-[10px] md:text-sm font-bold text-emerald-500">({percentPresent}%)</span>
-                                </div>
-                                <div className="mt-1 md:mt-2 w-24 md:w-32 bg-gray-100 rounded-full h-1 md:h-1.5">
-                                    <div className="bg-emerald-500 h-1 md:h-1.5 rounded-full" style={{ width: `${percentPresent}%` }}></div>
-                                </div>
-                            </div>
-                            <div className="relative z-10 bg-emerald-100 p-2 md:p-3 rounded-xl text-emerald-600">
-                                <UserCheck className="w-5 h-5 md:w-8 md:h-8" />
-                            </div>
-                        </div>
-                        {/* Back */}
-                        <div className="flip-card-back bg-gradient-to-br from-emerald-500 to-emerald-600 border border-emerald-400 p-3 md:p-6 flex flex-col justify-center items-center text-white">
-                            <p className="text-xs md:text-sm font-bold mb-2 opacity-90">อัตราการมาเรียน</p>
-                            <div className="text-3xl md:text-5xl font-bold">{percentPresent}%</div>
-                            <p className="text-[10px] md:text-xs opacity-80 mt-1">{totalPresent} จาก {totalStudents} คน</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Card 3: Absent - Flip Card */}
-                <div
-                    className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['absent'] ? 'flipped' : ''}`}
-                    onClick={() => toggleFlip('absent')}
-                >
-                    <div className="flip-card-inner">
-                        {/* Front */}
-                        <div className="flip-card-front bg-white border border-gray-100 p-3 md:p-6 flex items-center justify-between relative overflow-hidden">
-                            <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-rose-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4"></div>
-                            <div className="relative z-10 text-left">
-                                <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">ขาด/ลา/ป่วย</p>
-                                <h3 className="text-2xl md:text-4xl font-bold text-rose-600">{totalAbsent}</h3>
-                                <p className="text-[10px] text-gray-400 mt-1">คน</p>
-                            </div>
-                            <div className="relative z-10 bg-rose-100 p-2 md:p-3 rounded-xl text-rose-600">
-                                <UserX className="w-5 h-5 md:w-8 md:h-8" />
-                            </div>
-                        </div>
-                        {/* Back */}
-                        <div className="flip-card-back bg-gradient-to-br from-rose-500 to-rose-600 border border-rose-400 p-3 md:p-6 flex flex-col justify-center items-center text-white">
-                            <p className="text-xs md:text-sm font-bold mb-2 opacity-90">อัตราการขาดเรียน</p>
-                            <div className="text-3xl md:text-5xl font-bold">{totalStudents > 0 ? ((totalAbsent / totalStudents) * 100).toFixed(1) : 0}%</div>
-                            <p className="text-[10px] md:text-xs opacity-80 mt-1">{totalAbsent} จาก {totalStudents} คน</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Card 4: Classes Submitted - Flip Card */}
-                <div
-                    className={`flip-card h-28 md:h-36 cursor-pointer ${flippedCards['classes'] ? 'flipped' : ''}`}
-                    onClick={() => toggleFlip('classes')}
-                >
-                    <div className="flip-card-inner">
-                        {/* Front */}
-                        <div className="flip-card-front bg-white border border-gray-100 p-3 md:p-6 flex items-center justify-between relative overflow-hidden">
-                            <div className="absolute right-0 top-0 w-16 md:w-24 h-16 md:h-24 bg-indigo-50 rounded-bl-full -mr-2 md:-mr-4 -mt-2 md:-mt-4"></div>
-                            <div className="relative z-10 text-left">
-                                <p className="text-gray-500 text-xs md:text-sm font-bold mb-0.5 md:mb-1">ห้องที่บันทึก</p>
-                                <div className="flex items-baseline gap-1 md:gap-2">
-                                    <h3 className={`text-2xl md:text-4xl font-bold ${isAllSubmitted ? 'text-indigo-600' : 'text-amber-600'}`}>{submittedClasses}</h3>
-                                    <span className="text-sm md:text-lg font-bold text-gray-400">/ {totalClasses}</span>
-                                </div>
-                                <p className="text-[10px] text-gray-400 mt-1">{isAllSubmitted ? 'ครบแล้ว ✓' : 'รอบันทึก'}</p>
-                            </div>
-                            <div className={`relative z-10 p-2 md:p-3 rounded-xl ${isAllSubmitted ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'}`}>
-                                <ClipboardCheck className="w-5 h-5 md:w-8 md:h-8" />
-                            </div>
-                        </div>
-                        {/* Back */}
-                        <div className={`flip-card-back border p-3 md:p-6 flex flex-col justify-center items-center text-white ${isAllSubmitted ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 border-indigo-400' : 'bg-gradient-to-br from-amber-500 to-amber-600 border-amber-400'}`}>
-                            <p className="text-xs md:text-sm font-bold mb-2 opacity-90">{isAllSubmitted ? 'บันทึกครบแล้ว!' : 'รอบันทึกจาก'}</p>
-                            {isAllSubmitted ? (
-                                <div className="text-3xl md:text-5xl font-bold">✓</div>
-                            ) : (
-                                <div className="text-center">
-                                    <div className="flex flex-col gap-0.5 text-xs md:text-sm font-medium">
-                                        {missingClasses.slice(0, 4).map(c => (
-                                            <span key={c.grade}>• {c.grade.replace('ประถมศึกษาปีที่ ', 'ป.')}</span>
-                                        ))}
-                                        {missingClasses.length > 4 && <span className="opacity-70">+{missingClasses.length - 4} ห้อง</span>}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Attendance Bar Chart by Grade */}
-            <div className="bg-white rounded-2xl p-4 md:p-6 shadow-md border border-gray-100">
+            {/* Combined Attendance Chart - Radial Gauge + Bar Chart */}
+            <div ref={chartRef} data-section="chart" className={`bg-white rounded-2xl p-4 md:p-6 shadow-md border border-gray-100 transition-all duration-1000 ${isChartVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
                         <Activity className="w-4 h-4 md:w-5 md:h-5 text-brand-500" />
-                        อัตราการมาเรียนตามระดับชั้น
+                        ภาพรวมการมาเรียน
                     </h3>
                     <span className="text-xs text-gray-400">{new Date(currentDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span>
                 </div>
-                <div className="space-y-3">
+
+                {/* Radial Gauge - Overall Attendance */}
+                <div className="flex flex-col items-center mb-6">
+                    <div className="relative w-40 h-40 md:w-48 md:h-48">
+                        {/* Background Arc */}
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            {/* Background track */}
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r="42"
+                                fill="none"
+                                stroke="#e5e7eb"
+                                strokeWidth="10"
+                                strokeLinecap="round"
+                            />
+                            {/* Progress arc with gradient */}
+                            <defs>
+                                <linearGradient id="attendanceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stopColor="#8b5cf6" />
+                                    <stop offset="50%" stopColor="#6366f1" />
+                                    <stop offset="100%" stopColor="#3b82f6" />
+                                </linearGradient>
+                            </defs>
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r="42"
+                                fill="none"
+                                stroke="url(#attendanceGradient)"
+                                strokeWidth="10"
+                                strokeLinecap="round"
+                                strokeDasharray={isChartVisible ? `${percentPresent * 2.64} 264` : '0 264'}
+                                style={{ transition: 'stroke-dasharray 2.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                            />
+                        </svg>
+                        {/* Center Text */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
+                                {percentPresent}%
+                            </div>
+                            <div className="text-xs text-gray-500 font-medium">อัตราการมาเรียนรวม</div>
+                        </div>
+                    </div>
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-4 gap-3 mt-4 w-full max-w-md">
+                        <div className="text-center p-2 rounded-xl bg-blue-50">
+                            <div className="text-lg font-bold text-blue-600">{totalStudents}</div>
+                            <div className="text-[10px] text-gray-500 font-medium">ทั้งหมด</div>
+                        </div>
+                        <div className="text-center p-2 rounded-xl bg-emerald-50">
+                            <div className="text-lg font-bold text-emerald-600">
+                                {totalPresent}<span className="text-xs text-emerald-400">/{totalStudents}</span>
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-medium">มาเรียน</div>
+                        </div>
+                        <div className="text-center p-2 rounded-xl bg-rose-50">
+                            <div className="text-lg font-bold text-rose-600">
+                                {totalAbsent}<span className="text-xs text-rose-400">/{totalStudents}</span>
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-medium">ขาด/ลา</div>
+                        </div>
+                        <div className={`text-center p-2 rounded-xl ${isAllSubmitted ? 'bg-indigo-50' : 'bg-amber-50'}`}>
+                            <div className={`text-lg font-bold ${isAllSubmitted ? 'text-indigo-600' : 'text-amber-600'}`}>
+                                {submittedClasses}/{totalClasses}
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-medium">
+                                {isAllSubmitted ? 'ครบแล้ว ✓' : 'รอบันทึก'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">รายละเอียดรายชั้นเรียน</span>
+                    <div className="flex-1 h-px bg-gray-200"></div>
+                </div>
+
+                {/* Compact Bar Chart by Grade */}
+                <div className="space-y-2">
                     {(() => {
                         const order = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
                         const sortedStats = [...allStats].sort((a, b) => order.indexOf(a.grade) - order.indexOf(b.grade));
-                        const kindergartenStats = sortedStats.filter(s => s.grade.includes('อนุบาล'));
-                        const primaryStats = sortedStats.filter(s => !s.grade.includes('อนุบาล'));
 
-                        const renderBar = (stat: GradeStats) => {
+                        return sortedStats.map((stat, index) => {
                             const rate = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
                             const isGood = rate >= 90;
                             const isWarning = rate >= 80 && rate < 90;
+                            const isKindergarten = stat.grade.includes('อนุบาล');
+                            const animationDelay = index * 150; // Staggered animation (slower)
+
+                            // Status indicator
+                            const getStatusIcon = () => {
+                                if (!stat.isSubmitted) return <Clock className="w-3 h-3 text-gray-400" />;
+                                if (isGood) return <UserCheck className="w-3 h-3 text-emerald-500" />;
+                                if (isWarning) return <AlertTriangle className="w-3 h-3 text-amber-500" />;
+                                return <UserX className="w-3 h-3 text-rose-500" />;
+                            };
+
                             return (
-                                <div key={stat.grade} className="flex items-center gap-3">
-                                    <div className="w-20 md:w-28 text-xs font-medium text-gray-600 truncate">{stat.grade.replace('ประถมศึกษาปีที่ ', 'ป.')}</div>
-                                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden relative">
-                                        <div
-                                            className={`h-full rounded-full transition-all duration-700 ${!stat.isSubmitted ? 'bg-gray-300' :
-                                                isGood ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                                                    isWarning ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                                                        'bg-gradient-to-r from-rose-400 to-rose-500'
-                                                }`}
-                                            style={{ width: stat.isSubmitted ? `${rate}%` : '100%' }}
-                                        />
-                                        {/* Only show "รอข้อมูล" on school days */}
-                                        {isSchoolDay && !stat.isSubmitted && (
-                                            <div className="absolute inset-0 flex items-center justify-center">
-                                                <span className="text-[10px] font-bold text-gray-500">รอข้อมูล</span>
-                                            </div>
-                                        )}
-                                        {/* Show "วันหยุด" on non-school days */}
-                                        {!isSchoolDay && (
-                                            <div className="absolute inset-0 flex items-center justify-center">
-                                                <span className="text-[10px] font-bold text-gray-400">วันหยุด</span>
-                                            </div>
-                                        )}
+                                <div
+                                    key={stat.grade}
+                                    className={`group hover:bg-gray-50 p-1.5 rounded-lg transition-all duration-800 ease-out ${isChartVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'}`}
+                                    style={{ transitionDelay: isChartVisible ? `${animationDelay + 300}ms` : '0ms' }}
+                                >
+                                    {/* Main row */}
+                                    <div className="flex items-center gap-2">
+                                        {/* Grade indicator */}
+                                        <div className={`w-1.5 h-8 rounded-full ${isKindergarten ? 'bg-orange-400' : 'bg-blue-400'}`}></div>
+
+                                        {/* Grade name */}
+                                        <div className="w-16 md:w-20 text-xs font-medium text-gray-700 truncate">
+                                            {stat.grade.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                                        </div>
+
+                                        {/* Progress bar */}
+                                        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
+                                            <div
+                                                className={`h-full rounded-full ${!stat.isSubmitted ? 'bg-gray-300' :
+                                                    isGood ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
+                                                        isWarning ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                                            'bg-gradient-to-r from-rose-400 to-rose-500'
+                                                    }`}
+                                                style={{
+                                                    width: isChartVisible && stat.isSubmitted ? `${rate}%` : (stat.isSubmitted ? '0%' : '100%'),
+                                                    transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                    transitionDelay: isChartVisible ? `${animationDelay + 500}ms` : '0ms'
+                                                }}
+                                            />
+                                            {/* Overlay text for waiting/holiday */}
+                                            {isSchoolDay && !stat.isSubmitted && (
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="text-[9px] font-bold text-gray-500">รอข้อมูล</span>
+                                                </div>
+                                            )}
+                                            {!isSchoolDay && (
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="text-[9px] font-bold text-gray-400">วันหยุด</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Status icon */}
+                                        <div className="w-5 flex justify-center">
+                                            {getStatusIcon()}
+                                        </div>
+
+                                        {/* Percentage */}
+                                        <div className={`w-11 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
+                                            isGood ? 'text-emerald-600' :
+                                                isWarning ? 'text-amber-600' :
+                                                    'text-rose-600'
+                                            }`}>
+                                            {stat.isSubmitted ? `${rate.toFixed(0)}%` : '-'}
+                                        </div>
                                     </div>
-                                    <div className={`w-10 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
-                                        isGood ? 'text-emerald-600' :
-                                            isWarning ? 'text-amber-600' :
-                                                'text-rose-600'
-                                        }`}>
-                                        {stat.isSubmitted ? `${rate.toFixed(0)}%` : '-'}
-                                    </div>
-                                    <div className="w-24 text-right text-[10px] font-medium text-gray-600">
-                                        <span className="font-bold text-gray-700">{stat.total}</span> (ช {stat.male}/ญ {stat.female})
-                                    </div>
+
+                                    {/* Present/Absent counts - Below the bar */}
+                                    {stat.isSubmitted && (
+                                        <div className="flex items-center gap-2 ml-[72px] md:ml-[88px] mt-0.5 text-[10px]">
+                                            <span className="text-gray-600">
+                                                <span className="font-bold">{stat.total}</span>
+                                                <span className="text-gray-400 ml-0.5">คน</span>
+                                            </span>
+                                            <span className="text-gray-300">|</span>
+                                            <span className="text-emerald-600">
+                                                <span className="font-bold">{stat.present}</span>
+                                                <span className="text-gray-400 ml-0.5">มา</span>
+                                            </span>
+                                            <span className="text-gray-300">|</span>
+                                            <span className="text-rose-500">
+                                                <span className="font-bold">{stat.absent}</span>
+                                                <span className="text-gray-400 ml-0.5">ขาด</span>
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             );
-                        };
-
-                        return (
-                            <>
-                                {/* Kindergarten Section */}
-                                {kindergartenStats.length > 0 && (
-                                    <div className="mb-2">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Baby className="w-3.5 h-3.5 text-orange-500" />
-                                            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">ระดับปฐมวัย</span>
-                                            <div className="flex-1 h-px bg-orange-200"></div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {kindergartenStats.map(renderBar)}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Primary Section */}
-                                {primaryStats.length > 0 && (
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-                                            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">ระดับประถมศึกษา</span>
-                                            <div className="flex-1 h-px bg-blue-200"></div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {primaryStats.map(renderBar)}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        );
+                        });
                     })()}
                 </div>
+
                 {/* Legend */}
-                <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100">
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                        <UserCheck className="w-3 h-3 text-emerald-500" />
                         <span className="text-[10px] text-gray-500">≥90% ดีมาก</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                        <AlertTriangle className="w-3 h-3 text-amber-500" />
                         <span className="text-[10px] text-gray-500">80-89% พอใช้</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                        <UserX className="w-3 h-3 text-rose-500" />
                         <span className="text-[10px] text-gray-500">&lt;80% ต้องปรับปรุง</span>
                     </div>
                 </div>
@@ -1087,7 +1096,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
                 {/* LEFT COLUMN: Carousels */}
-                <div className="lg:col-span-7 flex flex-col gap-6">
+                <div ref={carouselRef} data-section="carousel" className={`lg:col-span-7 flex flex-col gap-6 transition-all duration-1000 ${isCarouselVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
                     <h3 className="text-lg font-bold text-black flex items-center gap-2">
                         <LayoutGrid className="w-5 h-5 text-brand-500" />
                         ข้อมูลรายระดับชั้น
@@ -1122,7 +1131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 </div>
 
                 {/* RIGHT COLUMN: Absent Details List */}
-                <div className="lg:col-span-5 flex flex-col gap-4">
+                <div ref={absentRef} data-section="absent" className={`lg:col-span-5 flex flex-col gap-4 transition-all duration-1000 delay-200 ${isAbsentVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}>
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-bold text-black flex items-center gap-2">
                             <UserX className="w-5 h-5 text-rose-500" />

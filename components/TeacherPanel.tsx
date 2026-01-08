@@ -529,7 +529,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 ) : students.length === 0 ? (
                     <div className="text-center py-20 text-gray-400">ไม่พบข้อมูลนักเรียน</div>
                 ) : (
-                    students.map((student) => {
+                    students.map((student, index) => {
                         const status = attendanceState[student.id];
                         const config = STATUS_CONFIG.find(c => c.status === status) || STATUS_CONFIG[0];
                         const isSelected = selectedStudentIds.has(student.id);
@@ -545,13 +545,18 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         };
                         const glowRgb = getGlowRgb(config.color);
 
+                        // Staggered animation delay (slower for visibility)
+                        const animationDelay = Math.min(index * 80, 640);
+
                         return (
                             <div
                                 key={student.id}
-                                className={`bg-white rounded-xl transition-all duration-200 ${isSelected ? 'ring-2 ring-brand-300' : ''}`}
+                                className={`bg-white rounded-xl transition-all duration-500 animate-fade-slide-up ${isSelected ? 'ring-2 ring-brand-300' : ''}`}
                                 style={{
                                     border: `2px solid rgb(${glowRgb})`,
-                                    boxShadow: `0 0 2px rgba(${glowRgb}, 1), 0 0 6px rgba(${glowRgb}, 0.25), 0 1px 3px rgba(0,0,0,0.08)`
+                                    boxShadow: `0 0 2px rgba(${glowRgb}, 1), 0 0 6px rgba(${glowRgb}, 0.25), 0 1px 3px rgba(0,0,0,0.08)`,
+                                    animationDelay: `${animationDelay}ms`,
+                                    animationFillMode: 'backwards'
                                 }}
                             >
                                 <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -601,22 +606,22 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
                     <div className="text-xs text-gray-500 font-bold mb-1">มาเรียน</div>
                     <div className="flex items-end gap-2">
                         <span className="text-2xl font-bold text-emerald-600">{stats.presentCount}</span>
                         <span className="text-xs font-medium text-emerald-500 mb-1">({stats.presentPercent}%)</span>
                     </div>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '50ms', animationFillMode: 'backwards' }}>
                     <div className="text-xs text-gray-500 font-bold mb-1">ขาด/ลา</div>
                     <div className="text-2xl font-bold text-rose-600">{stats.absentCount}</div>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
                     <div className="text-xs text-gray-500 font-bold mb-1">ชาย</div>
                     <div className="text-2xl font-bold text-blue-600">{stats.totalMale}</div>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '150ms', animationFillMode: 'backwards' }}>
                     <div className="text-xs text-gray-500 font-bold mb-1">หญิง</div>
                     <div className="text-2xl font-bold text-pink-600">{stats.totalFemale}</div>
                 </div>
