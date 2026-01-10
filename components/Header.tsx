@@ -83,7 +83,7 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLog
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-white/10 md:bg-transparent p-1 md:p-0 rounded-lg md:rounded-none border md:border-none border-white/20">
+              <div className={`flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-white/10 md:bg-transparent p-1 md:p-0 rounded-lg md:rounded-none border md:border-none border-white/20 ${currentUser.role === Role.TEACHER ? 'hidden md:flex' : ''}`}>
                 {onRefresh && (
                   <button
                     onClick={onRefresh}

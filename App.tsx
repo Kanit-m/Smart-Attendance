@@ -284,7 +284,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 font-sans pb-20 md:pb-0">
+    <div className={`min-h-screen flex flex-col bg-gray-50 font-sans pb-20 md:pb-0 ${view === 'teacher' ? 'h-screen overflow-hidden md:h-auto md:overflow-visible' : ''}`}>
       <Header
         currentUser={currentUser}
         onLoginAdmin={() => setShowAdminLogin(true)}
@@ -293,7 +293,7 @@ function App() {
         onRefresh={() => fetchStudents(true)}
       />
 
-      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'teacher' ? 'overflow-hidden h-[calc(100vh-80px)] md:overflow-visible md:h-auto' : ''}`}>
+      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'teacher' ? 'p-0 max-w-none' : ''}`}>
         {view === 'dashboard' && <Dashboard students={students} />}
 
         {view === 'admin' && currentUser?.role === Role.ADMIN && (

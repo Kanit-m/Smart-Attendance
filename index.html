@@ -280,6 +280,50 @@
         filter: brightness(1.15);
       }
     }
+
+    /* Swipe Animation for Charts */
+    @keyframes swipeIn {
+      0% {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes progressFill {
+      0% {
+        transform: scaleX(0);
+        transform-origin: left;
+      }
+
+      100% {
+        transform: scaleX(1);
+        transform-origin: left;
+      }
+    }
+
+    .animate-swipe-in {
+      animation: swipeIn 0.4s ease-out forwards;
+    }
+
+    .animate-progress-fill {
+      animation: progressFill 0.5s ease-out forwards;
+    }
+
+    /* Donut Chart Animation */
+    @keyframes donutFill {
+      0% {
+        stroke-dasharray: 0 251;
+      }
+    }
+
+    .animate-donut {
+      animation: donutFill 0.6s ease-out forwards;
+    }
   </style>
   <script type="importmap">
 {

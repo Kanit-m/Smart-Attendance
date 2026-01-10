@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Save, Loader2, LayoutDashboard, ArrowLeft,
-    Calendar as CalendarIcon,
+    Calendar as CalendarIcon, X, CheckCircle2,
     UserCheck, UserX, Clock, Thermometer, Calendar,
-    CheckCircle2, CheckSquare, Square, X,
-    ClipboardList, ChevronLeft, ChevronRight, PieChart, Contact,
+    CheckSquare, Square, Contact,
+    ClipboardList, ChevronLeft, ChevronRight, PieChart,
     Building2, RotateCcw, History, Activity
 } from 'lucide-react';
 import {
@@ -47,6 +47,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     // Data State
     const [students, setStudents] = useState<Student[]>([]);
     const [attendanceState, setAttendanceState] = useState<Record<string, AttendanceStatus>>({});
+    const [initialAttendanceState, setInitialAttendanceState] = useState<Record<string, AttendanceStatus>>({});
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -54,6 +55,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [showResetModal, setShowResetModal] = useState(false);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [selectedClass, setSelectedClass] = useState<string>(currentUser.assignedClass || GRADE_OPTIONS[0]);
+
+    // Success Toast State
+    const [showSuccessToast, setShowSuccessToast] = useState(false);
 
     // History Report State
     const [historyStartDate, setHistoryStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -72,6 +76,11 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
     // Track if holidays have been loaded
     const [holidaysLoaded, setHolidaysLoaded] = useState(false);
+
+    // Check if there are unsaved changes
+    const hasUnsavedChanges = useMemo(() => {
+        return JSON.stringify(attendanceState) !== JSON.stringify(initialAttendanceState);
+    }, [attendanceState, initialAttendanceState]);
 
     // --- Cache Configuration ---
     const HOLIDAYS_CACHE_KEY = 'cached_holidays';
@@ -173,6 +182,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 newState[s.id] = (existing.get(s.id) as AttendanceStatus) || (isHoliday ? AttendanceStatus.HOLIDAY : AttendanceStatus.PRESENT);
             });
             setAttendanceState(newState);
+            setInitialAttendanceState(newState); // Store initial state for comparison
         } catch (error) {
             console.error("Error loading attendance:", error);
         }
@@ -259,6 +269,12 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             sessionStorage.removeItem(`${cacheKey}_time`);
 
             setShowConfirmModal(false);
+            setInitialAttendanceState(attendanceState); // Reset to mark as saved
+
+            // Show success toast
+            setShowSuccessToast(true);
+            setTimeout(() => setShowSuccessToast(false), 3000); // Auto-hide after 3 seconds
+
             setTimeout(() => setSaving(false), 500);
         } catch (err) {
             console.error(err);
@@ -459,34 +475,35 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         <div className="flex-1 flex flex-col overflow-hidden h-full relative">
             {/* Bulk Actions Toolbar */}
             <div className="bg-white border-b border-gray-200 p-3 flex flex-col gap-2 shrink-0">
-                <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={selectAll}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${selectedStudentIds.size === students.length && students.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                        >
-                            {selectedStudentIds.size === students.length && students.length > 0 ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                            <span className="text-sm font-bold whitespace-nowrap">เลือกทั้งหมด</span>
-                        </button>
+                <div className="flex items-center justify-between gap-2">
+                    <button
+                        onClick={selectAll}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all shrink-0 ${selectedStudentIds.size === students.length && students.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        {selectedStudentIds.size === students.length && students.length > 0 ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                        <span className="text-sm font-bold whitespace-nowrap">เลือกทั้งหมด</span>
+                    </button>
 
-                        {selectedStudentIds.size > 0 && (
-                            <div className="flex items-center gap-1 pl-2 border-l border-gray-200 animate-fade-in">
-                                <span className="text-xs font-bold text-gray-400 hidden sm:inline mr-1">ตั้งค่าที่เลือก:</span>
-                                {STATUS_CONFIG.map(config => (
-                                    <button
-                                        key={config.status}
-                                        onClick={() => applyStatusToSelection(config.status)}
-                                        className={`p-2 rounded-lg transition-all hover:scale-110 ${config.color.replace('bg-', 'text-').replace('hover:bg-', '')} bg-gray-50 border border-gray-100`}
-                                        title={`ตั้งเป็น ${config.label}`}
-                                    >
-                                        <config.icon className="w-4 h-4" />
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    {/* Desktop: Status buttons inline */}
+                    {selectedStudentIds.size > 0 && (
+                        <div className="hidden sm:flex items-center gap-1 pl-2 border-l border-gray-200 animate-fade-in">
+                            <span className="text-xs font-bold text-gray-400 mr-1 shrink-0">ตั้งค่า:</span>
+                            {STATUS_CONFIG.map(config => (
+                                <button
+                                    key={config.status}
+                                    onClick={() => applyStatusToSelection(config.status)}
+                                    className="p-2 rounded-lg transition-all hover:scale-110 bg-gray-50 border border-gray-100 shrink-0"
+                                    style={{ color: config.color.includes('emerald') ? '#059669' : config.color.includes('yellow') ? '#ca8a04' : config.color.includes('blue') ? '#2563eb' : config.color.includes('purple') ? '#9333ea' : '#e11d48' }}
+                                    title={`ตั้งเป็น ${config.label}`}
+                                >
+                                    <config.icon className="w-4 h-4" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
-                    <div className="flex items-center gap-2">
+                    {/* Reset & Save buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
                         <button
                             onClick={handleResetClick}
                             disabled={loading || saving}
@@ -498,18 +515,44 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         <button
                             onClick={handleSaveClick}
                             disabled={loading || saving}
-                            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-bold shadow-sm hover:opacity-90 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="hidden md:flex items-center gap-2 px-4 py-2 text-white rounded-lg font-bold shadow-sm hover:opacity-90 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             style={{ backgroundColor: '#003060' }}
                         >
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            <span className="hidden sm:inline">บันทึก</span>
+                            <span>บันทึก</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Selected List Names */}
+                {/* Mobile: Status buttons in separate row */}
                 {selectedStudentIds.size > 0 && (
-                    <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 flex items-start gap-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
+                    <div className="sm:hidden flex items-center justify-between gap-1 animate-fade-in bg-gray-50 p-2 rounded-lg">
+                        <span className="text-xs font-bold text-gray-500 shrink-0">ตั้งค่า:</span>
+                        <div className="flex gap-1 flex-1">
+                            {STATUS_CONFIG.map(config => (
+                                <button
+                                    key={config.status}
+                                    onClick={() => applyStatusToSelection(config.status)}
+                                    className="flex-1 p-2.5 rounded-lg transition-all active:scale-95 bg-white border border-gray-200 shadow-sm"
+                                    style={{ color: config.color.includes('emerald') ? '#059669' : config.color.includes('yellow') ? '#ca8a04' : config.color.includes('blue') ? '#2563eb' : config.color.includes('purple') ? '#9333ea' : '#e11d48' }}
+                                >
+                                    <config.icon className="w-5 h-5 mx-auto" strokeWidth={2} />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Selected count badge on mobile */}
+                {selectedStudentIds.size > 0 && (
+                    <div className="sm:hidden bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 text-center">
+                        <span className="text-sm font-bold text-brand-700">เลือก {selectedStudentIds.size} คน</span>
+                    </div>
+                )}
+
+                {/* Selected List Names - Desktop only */}
+                {selectedStudentIds.size > 0 && selectedStudentIds.size < students.length && (
+                    <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 flex items-start gap-2 overflow-x-auto whitespace-nowrap custom-scrollbar hidden sm:flex">
                         <span className="text-xs font-bold text-brand-700 shrink-0 mt-0.5">เลือกอยู่ ({selectedStudentIds.size}):</span>
                         <div className="flex gap-2">
                             {students.filter(s => selectedStudentIds.has(s.id)).map(s => (
@@ -523,7 +566,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* Student List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24">
                 {loading ? (
                     <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-500" /></div>
                 ) : students.length === 0 ? (
@@ -559,40 +602,51 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                     animationFillMode: 'backwards'
                                 }}
                             >
-                                <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="p-2 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                                     {/* Info Area */}
-                                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => toggleSelection(student.id)}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-brand-500 border-brand-500 text-white' : 'border-gray-300 text-transparent'}`}>
+                                    <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => toggleSelection(student.id)}>
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-brand-500 border-brand-500 text-white' : 'border-gray-300 text-transparent'}`}>
                                             <CheckSquare className="w-3.5 h-3.5" />
                                         </div>
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${student.gender === Gender.MALE ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}`}>
+                                        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold shrink-0 ${student.gender === Gender.MALE ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}`}>
                                             {student.number}
                                         </div>
-                                        <div>
-                                            <div className="font-bold text-gray-800">{student.name}</div>
-                                            <div className="text-xs text-gray-400">{student.studentId} • {student.gender}</div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-gray-800 text-sm sm:text-base truncate">{student.name}</div>
+                                            <div className="text-xs text-gray-400">
+                                                <span className="hidden sm:inline">{student.studentId} • </span>
+                                                {student.gender === Gender.MALE ? 'ชาย' : 'หญิง'}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Status Buttons (Desktop: Row, Mobile: Grid) */}
-                                    <div className="grid grid-cols-5 gap-1 sm:flex sm:gap-2">
+                                    {/* Status Buttons - Hide on mobile when multiple selected */}
+                                    <div className={`grid grid-cols-5 gap-2 sm:flex sm:gap-2 ${selectedStudentIds.size > 1 ? 'hidden sm:flex' : ''}`}>
                                         {STATUS_CONFIG.map((c) => (
                                             <button
                                                 key={c.status}
                                                 onClick={(e) => { e.stopPropagation(); setAttendanceState(prev => ({ ...prev, [student.id]: c.status })); }}
                                                 className={`
-                                                  relative flex flex-col sm:flex-row items-center justify-center sm:gap-1.5 py-2 sm:px-3 sm:py-1.5 rounded-lg transition-all
+                                                  relative flex flex-col sm:flex-row items-center justify-center sm:gap-1.5 
+                                                  py-2.5 sm:px-3 sm:py-2 rounded-xl transition-all min-h-[52px]
                                                   ${status === c.status
-                                                        ? `${c.color} text-white shadow-sm ring-2 ring-offset-1 ring-${c.color.split('-')[1]}-200`
-                                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                                        ? `${c.color} text-white shadow-md ring-2 ring-offset-1 ring-${c.color.split('-')[1]}-300`
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
                                                     }
                                               `}
                                             >
-                                                <c.icon className="w-4 h-4" />
-                                                <span className="text-[10px] sm:text-xs font-bold">{c.label}</span>
+                                                <c.icon className="w-5 h-5" strokeWidth={2.5} />
+                                                <span className="text-[11px] sm:text-xs font-bold mt-0.5 sm:mt-0">{c.label}</span>
                                             </button>
                                         ))}
                                     </div>
+                                    {/* Status badge when hidden on mobile */}
+                                    {selectedStudentIds.size > 1 && (
+                                        <div className={`sm:hidden flex items-center justify-center gap-2 py-2 px-3 rounded-xl ${config.bg} ${config.text}`}>
+                                            <config.icon className="w-5 h-5" />
+                                            <span className="text-sm font-bold">{config.label}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -906,7 +960,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     return (
-        <div className="rounded-3xl shadow-xl border border-white/20 flex h-[calc(100vh-120px)] overflow-hidden relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
+        <div className="rounded-3xl shadow-xl border border-white/20 flex h-[calc(100vh-100px)] md:h-[calc(100vh-180px)] overflow-hidden relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
 
             {/* Desktop Sidebar Only */}
             <div className={`hidden md:flex flex-col border-r border-white/20 transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`} style={{ backgroundColor: '#003060' }}>
@@ -977,11 +1031,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 {currentView === 'dashboard' && RenderDashboard()}
                 {currentView === 'room_history' && RenderRoomHistory()}
                 {currentView === 'school_dashboard' && (
-                    <div className="p-4 md:p-8 pb-20 overflow-y-auto h-full bg-white">
-                        <div className="max-w-7xl mx-auto">
-                            <Dashboard embedded students={allStudents} />
-                        </div>
-                    </div>
+                    <Dashboard embedded students={allStudents} />
                 )}
 
             </div>
@@ -1041,18 +1091,17 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
                             <button
                                 onClick={() => setShowConfirmModal(false)}
-                                className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-bold hover:bg-white transition-colors"
+                                className="flex-1 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors"
                             >
                                 แก้ไขข้อมูล
                             </button>
                             <button
                                 onClick={confirmSave}
                                 disabled={saving}
-                                className="flex-1 py-3 rounded-xl text-white font-bold shadow-lg hover:opacity-90 transition-all flex justify-center items-center gap-2"
-                                style={{ backgroundColor: '#003060' }}
+                                className="flex-1 py-3 rounded-xl bg-emerald-500 text-white font-bold shadow-lg hover:bg-emerald-600 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
                             >
                                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                                ยืนยันบันทึก
+                                บันทึก
                             </button>
                         </div>
                     </div>
@@ -1076,7 +1125,22 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 onViewChange={setCurrentView}
                 onLogout={onLogout}
                 onBackToAdmin={onBackToAdmin}
+                hasChanges={hasUnsavedChanges}
+                onSave={handleSaveClick}
+                saving={saving}
+                userName={currentUser.name}
+                userClass={selectedClass}
             />
+
+            {/* Success Toast */}
+            {showSuccessToast && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+                    <div className="bg-emerald-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="font-bold">บันทึกสำเร็จแล้ว!</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

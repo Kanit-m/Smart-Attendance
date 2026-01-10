@@ -47,10 +47,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     const [pIndex, setPIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
 
+    // Mobile Widget: Selected Grade
+    const [selectedMobileGrade, setSelectedMobileGrade] = useState<string | null>(null);
+    const [expandedStudentName, setExpandedStudentName] = useState<string | null>(null);
+    const [showGradePicker, setShowGradePicker] = useState(false);
+
 
     // Touch State for Swipe
     const [touchStart, setTouchStart] = useState(0);
     const [touchEnd, setTouchEnd] = useState(0);
+    const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
 
     // Report Modal State
     const [showReportModal, setShowReportModal] = useState(false);
@@ -108,14 +114,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             const observer = new IntersectionObserver(
                 (entries) => {
                     entries.forEach((entry) => {
-                        if (entry.isIntersecting) {
-                            const target = entry.target as HTMLElement;
-                            const sectionId = target.dataset.section;
+                        const target = entry.target as HTMLElement;
+                        const sectionId = target.dataset.section;
 
+                        if (entry.isIntersecting) {
+                            // Element enters viewport - animate in
                             if (sectionId === 'chart') setIsChartVisible(true);
                             if (sectionId === 'calendar') setIsCalendarVisible(true);
                             if (sectionId === 'carousel') setIsCarouselVisible(true);
                             if (sectionId === 'absent') setIsAbsentVisible(true);
+                        } else {
+                            // Element leaves viewport - reset for re-animation
+                            if (sectionId === 'chart') setIsChartVisible(false);
+                            if (sectionId === 'calendar') setIsCalendarVisible(false);
+                            if (sectionId === 'carousel') setIsCarouselVisible(false);
+                            if (sectionId === 'absent') setIsAbsentVisible(false);
                         }
                     });
                 },
@@ -359,14 +372,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         totalFemale: activeStudents.filter(s => s.gender === Gender.FEMALE).length
     }), [activeStudents]);
 
-    // Memoize attendance totals
-    const { totalAbsent, totalPresent, percentPresent } = useMemo(() => {
-        const absentCount = attendances.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status)).length;
-        const presentCount = attendances.filter(a => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE).length;
+    // Memoize attendance totals with gender breakdown
+    const { totalAbsent, totalPresent, percentPresent, presentMaleTotal, presentFemaleTotal, absentMaleTotal, absentFemaleTotal } = useMemo(() => {
+        const absentRecords = attendances.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
+        const presentRecords = attendances.filter(a => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE);
         return {
-            totalAbsent: absentCount,
-            totalPresent: presentCount,
-            percentPresent: activeStudents.length > 0 ? ((presentCount / activeStudents.length) * 100).toFixed(1) : '0.0'
+            totalAbsent: absentRecords.length,
+            totalPresent: presentRecords.length,
+            percentPresent: activeStudents.length > 0 ? ((presentRecords.length / activeStudents.length) * 100).toFixed(1) : '0.0',
+            presentMaleTotal: presentRecords.filter(a => a.gender === Gender.MALE).length,
+            presentFemaleTotal: presentRecords.filter(a => a.gender === Gender.FEMALE).length,
+            absentMaleTotal: absentRecords.filter(a => a.gender === Gender.MALE).length,
+            absentFemaleTotal: absentRecords.filter(a => a.gender === Gender.FEMALE).length
         };
     }, [attendances, activeStudents.length]);
 
@@ -403,7 +420,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     }
 
     const containerClass = embedded
-        ? "w-full space-y-6 animate-fade-in text-black"
+        ? "flex-1 overflow-auto p-4 md:p-8 pb-24 space-y-6 animate-fade-in text-black bg-white snap-y snap-proximity md:snap-none"
         : "max-w-7xl mx-auto px-4 py-6 space-y-6 animate-fade-in text-black";
 
     // Render Helper for Carousel
@@ -524,764 +541,1287 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     return (
         <div
             className={containerClass}
-            style={{
+            style={embedded ? {} : {
                 backgroundImage: 'url(/circle-scatter-haikei.svg)',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat'
             }}
         >
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <Activity className="w-5 h-5 text-brand-600" />
-                        <span className="text-sm font-bold text-brand-600 uppercase tracking-wider">Real-time Dashboard</span>
+            <div className={embedded ? "max-w-7xl mx-auto space-y-6" : ""}>
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Activity className="w-5 h-5 text-brand-600" />
+                            <span className="text-sm font-bold text-brand-600 uppercase tracking-wider">Real-time Dashboard</span>
+                        </div>
+                        <h2 className="text-3xl font-bold text-black">ภาพรวมสถานศึกษา</h2>
                     </div>
-                    <h2 className="text-3xl font-bold text-black">ภาพรวมสถานศึกษา</h2>
-                </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                    {/* Print Report Button - Hidden on mobile */}
-                    <button
-                        onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
-                        className="hidden md:flex w-full sm:w-auto items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
-                    >
-                        <Printer className="w-4 h-4" />
-                        <span>พิมพ์รายงาน</span>
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                        {/* Print Report Button - Hidden on mobile */}
+                        <button
+                            onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
+                            className="hidden md:flex w-full sm:w-auto items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span>พิมพ์รายงาน</span>
+                        </button>
 
-                    {/* DATE PICKER COMPONENT */}
-                    <div
-                        className="relative group w-full sm:w-auto cursor-pointer"
-                        onClick={() => dateInputRef.current?.showPicker?.()}
-                    >
-                        {/* Hidden Date Input */}
-                        <input
-                            ref={dateInputRef}
-                            type="date"
-                            value={currentDate}
-                            onChange={(e) => setCurrentDate(e.target.value)}
-                            className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
-                        />
-                        <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 group-hover:border-brand-400 group-hover:shadow-md transition-all">
-                            <CalendarDays className="w-5 h-5 text-brand-600 group-hover:text-brand-700" />
-                            <div className="flex flex-col items-start">
-                                <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-0.5">วันที่ข้อมูล</span>
-                                <span className="text-sm font-bold text-black group-hover:text-brand-800 leading-none">
-                                    {new Date(currentDate).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Weekend Alert - Auto detect Saturday/Sunday */}
-            {(() => {
-                const dateObj = new Date(currentDate);
-                const dayOfWeek = dateObj.getDay();
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                const dayName = dayOfWeek === 0 ? 'วันอาทิตย์' : 'วันเสาร์';
-
-                if (isWeekend) {
-                    return (
-                        <div className="bg-gradient-to-r from-slate-100 to-gray-100 border border-slate-200 text-slate-700 px-6 py-4 rounded-2xl shadow-sm flex items-center gap-4 animate-slide-up">
-                            <div className="bg-white/50 p-3 rounded-full shadow-sm backdrop-blur-sm">
-                                <CalendarDays className="w-6 h-6 text-slate-500" />
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-lg leading-tight">{dayName} - วันหยุดสุดสัปดาห์</h3>
-                                <p className="text-xs text-slate-500 font-medium">ไม่มีการบันทึกข้อมูลการมาเรียน</p>
-                            </div>
-                        </div>
-                    );
-                }
-                return null;
-            })()}
-
-            {/* TODAY'S STATUS - Holiday or Submission Summary */}
-            {totalClasses > 0 && (
-                todayHoliday ? (
-                    // HOLIDAY STATUS
-                    <div className="rounded-2xl shadow-sm border overflow-hidden animate-slide-up bg-gradient-to-r from-orange-100 to-amber-100 border-orange-200">
-                        <div className="px-5 py-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 rounded-full bg-orange-200">
-                                    <Sun className="w-6 h-6 text-orange-600" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg text-orange-800">
-                                        🏖️ วันหยุด: {todayHoliday.description}
-                                    </h3>
-                                    <p className="text-sm text-orange-600">
-                                        ไม่มีการบันทึกข้อมูลการมาเรียนในวันนี้
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="text-3xl">🌴</div>
-                        </div>
-                        <div className="h-1.5 bg-orange-400" />
-                    </div>
-                ) : isSchoolDay ? (
-                    // SCHOOL DAY - RECORDING STATUS
-                    <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
-                        ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
-                        : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
-                        }`}>
-                        <div className="px-5 py-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-full ${isAllSubmitted ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                                    {isAllSubmitted ? (
-                                        <ClipboardCheck className="w-6 h-6 text-emerald-600" />
-                                    ) : (
-                                        <Clock className="w-6 h-6 text-amber-600" />
-                                    )}
-                                </div>
-                                <div>
-                                    <h3 className={`font-bold text-lg ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
-                                        {isAllSubmitted ? '✅ บันทึกครบทุกห้องแล้ว!' : `📊 บันทึกแล้ว ${submittedClasses}/${totalClasses} ห้อง`}
-                                    </h3>
-                                    {isAllSubmitted ? (
-                                        <p className="text-sm text-emerald-600">ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้</p>
-                                    ) : (
-                                        <div className="text-sm text-amber-700">
-                                            <span>รอข้อมูลจาก:</span>
-                                            <div className="flex flex-col gap-0.5 mt-1 text-xs font-medium text-amber-800">
-                                                {missingClasses.map(c => (
-                                                    <span key={c.grade}>• {c.grade}</span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div className={`text-3xl font-bold ${isAllSubmitted ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                {Math.round((submittedClasses / totalClasses) * 100)}%
-                            </div>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="h-1.5 bg-white/50">
-                            <div
-                                className={`h-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                style={{ width: `${(submittedClasses / totalClasses) * 100}%` }}
+                        {/* DATE PICKER COMPONENT */}
+                        <div
+                            className="relative group w-full sm:w-auto cursor-pointer"
+                            onClick={() => dateInputRef.current?.showPicker?.()}
+                        >
+                            {/* Hidden Date Input */}
+                            <input
+                                ref={dateInputRef}
+                                type="date"
+                                value={currentDate}
+                                onChange={(e) => setCurrentDate(e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
                             />
+                            <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 group-hover:border-brand-400 group-hover:shadow-md transition-all">
+                                <CalendarDays className="w-5 h-5 text-brand-600 group-hover:text-brand-700" />
+                                <div className="flex flex-col items-start">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-0.5">วันที่ข้อมูล</span>
+                                    <span className="text-sm font-bold text-black group-hover:text-brand-800 leading-none">
+                                        {new Date(currentDate).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                ) : null
-            )}
+                </div>
 
-            {/* UPCOMING EVENT ALERT - Tomorrow or Next Few Days */}
-            {(() => {
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
-                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                {/* Weekend Alert - Auto detect Saturday/Sunday */}
+                {(() => {
+                    const dateObj = new Date(currentDate);
+                    const dayOfWeek = dateObj.getDay();
+                    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                    const dayName = dayOfWeek === 0 ? 'วันอาทิตย์' : 'วันเสาร์';
 
-                // Get tomorrow's date
-                const tomorrow = new Date(now);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+                    if (isWeekend) {
+                        return (
+                            <div className="bg-gradient-to-r from-slate-100 to-gray-100 border border-slate-200 text-slate-700 px-6 py-4 rounded-2xl shadow-sm flex items-center gap-4 animate-slide-up">
+                                <div className="bg-white/50 p-3 rounded-full shadow-sm backdrop-blur-sm">
+                                    <CalendarDays className="w-6 h-6 text-slate-500" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg leading-tight">{dayName} - วันหยุดสุดสัปดาห์</h3>
+                                    <p className="text-xs text-slate-500 font-medium">ไม่มีการบันทึกข้อมูลการมาเรียน</p>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
 
-                // Find events in the next 3 days (excluding today)
-                const upcomingAlerts = calendarItems.filter(item => {
+                {/* TODAY'S STATUS - Holiday or Submission Summary */}
+                {totalClasses > 0 && (
+                    todayHoliday ? (
+                        // HOLIDAY STATUS
+                        <div className="rounded-2xl shadow-sm border overflow-hidden animate-slide-up bg-gradient-to-r from-orange-100 to-amber-100 border-orange-200">
+                            <div className="px-5 py-4 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 rounded-full bg-orange-200">
+                                        <Sun className="w-6 h-6 text-orange-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg text-orange-800">
+                                            🏖️ วันหยุด: {todayHoliday.description}
+                                        </h3>
+                                        <p className="text-sm text-orange-600">
+                                            ไม่มีการบันทึกข้อมูลการมาเรียนในวันนี้
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-3xl">🌴</div>
+                            </div>
+                            <div className="h-1.5 bg-orange-400" />
+                        </div>
+                    ) : isSchoolDay ? (
+                        // SCHOOL DAY - RECORDING STATUS
+                        <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
+                            ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
+                            : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+                            }`}>
+                            <div className="px-5 py-4 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-full ${isAllSubmitted ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                                        {isAllSubmitted ? (
+                                            <ClipboardCheck className="w-6 h-6 text-emerald-600" />
+                                        ) : (
+                                            <Clock className="w-6 h-6 text-amber-600" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h3 className={`font-bold text-lg ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                            {isAllSubmitted ? '✅ บันทึกครบทุกห้องแล้ว!' : `📊 บันทึกแล้ว ${submittedClasses}/${totalClasses} ห้อง`}
+                                        </h3>
+                                        {isAllSubmitted ? (
+                                            <p className="text-sm text-emerald-600">ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้</p>
+                                        ) : (
+                                            <div className="text-sm text-amber-700">
+                                                <span>รอข้อมูลจาก:</span>
+                                                <div className="flex flex-col gap-0.5 mt-1 text-xs font-medium text-amber-800">
+                                                    {missingClasses.map(c => (
+                                                        <span key={c.grade}>• {c.grade}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className={`text-3xl font-bold ${isAllSubmitted ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                    {Math.round((submittedClasses / totalClasses) * 100)}%
+                                </div>
+                            </div>
+                            {/* Progress bar */}
+                            <div className="h-1.5 bg-white/50">
+                                <div
+                                    className={`h-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                    style={{ width: `${(submittedClasses / totalClasses) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+                    ) : null
+                )}
+
+                {/* UPCOMING EVENT ALERT - Tomorrow or Next Few Days */}
+                {(() => {
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                    // Get tomorrow's date
+                    const tomorrow = new Date(now);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+                    // Find events in the next 3 days (excluding today)
+                    const upcomingAlerts = calendarItems.filter(item => {
+                        // Parse date correctly for local timezone
+                        const [y, m, d] = item.date.split('-').map(Number);
+                        const eventDate = new Date(y, m - 1, d);
+                        const diffDays = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                        return diffDays > 0 && diffDays <= 3;
+                    });
+
+                    if (upcomingAlerts.length === 0) return null;
+
+                    // Get the most urgent alert (soonest)
+                    const urgentAlert = upcomingAlerts[0];
                     // Parse date correctly for local timezone
-                    const [y, m, d] = item.date.split('-').map(Number);
-                    const eventDate = new Date(y, m - 1, d);
-                    const diffDays = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                    return diffDays > 0 && diffDays <= 3;
-                });
+                    const [aY, aM, aD] = urgentAlert.date.split('-').map(Number);
+                    const alertDate = new Date(aY, aM - 1, aD);
+                    const daysUntil = Math.ceil((alertDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    const isTomorrow = urgentAlert.date === tomorrowStr;
+                    const isHoliday = urgentAlert.type === 'holiday';
 
-                if (upcomingAlerts.length === 0) return null;
-
-                // Get the most urgent alert (soonest)
-                const urgentAlert = upcomingAlerts[0];
-                // Parse date correctly for local timezone
-                const [aY, aM, aD] = urgentAlert.date.split('-').map(Number);
-                const alertDate = new Date(aY, aM - 1, aD);
-                const daysUntil = Math.ceil((alertDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                const isTomorrow = urgentAlert.date === tomorrowStr;
-                const isHoliday = urgentAlert.type === 'holiday';
-
-                return (
-                    <div className={`rounded-2xl shadow-sm border px-5 py-4 flex items-center gap-4 animate-slide-up ${isHoliday
-                        ? 'bg-gradient-to-r from-orange-100 to-amber-100 border-orange-300'
-                        : 'bg-gradient-to-r from-indigo-100 to-blue-100 border-indigo-300'
-                        }`}>
-                        <div className={`p-3 rounded-full ${isHoliday ? 'bg-orange-200' : 'bg-indigo-200'}`}>
-                            {isHoliday ? (
-                                <Sun className="w-6 h-6 text-orange-600" />
-                            ) : (
-                                <CalendarDays className="w-6 h-6 text-indigo-600" />
+                    return (
+                        <div className={`rounded-2xl shadow-sm border px-5 py-4 flex items-center gap-4 animate-slide-up ${isHoliday
+                            ? 'bg-gradient-to-r from-orange-100 to-amber-100 border-orange-300'
+                            : 'bg-gradient-to-r from-indigo-100 to-blue-100 border-indigo-300'
+                            }`}>
+                            <div className={`p-3 rounded-full ${isHoliday ? 'bg-orange-200' : 'bg-indigo-200'}`}>
+                                {isHoliday ? (
+                                    <Sun className="w-6 h-6 text-orange-600" />
+                                ) : (
+                                    <CalendarDays className="w-6 h-6 text-indigo-600" />
+                                )}
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isTomorrow
+                                        ? 'bg-red-500 text-white animate-pulse'
+                                        : 'bg-gray-200 text-gray-700'
+                                        }`}>
+                                        {isTomorrow ? '⚡ พรุ่งนี้!' : `อีก ${daysUntil} วัน`}
+                                    </span>
+                                    {isHoliday && <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">วันหยุด</span>}
+                                </div>
+                                <h3 className={`font-bold text-lg mt-1 ${isHoliday ? 'text-orange-800' : 'text-indigo-800'}`}>
+                                    {urgentAlert.title}
+                                </h3>
+                                <p className={`text-sm ${isHoliday ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                    {alertDate.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                            </div>
+                            {upcomingAlerts.length > 1 && (
+                                <div className="text-right">
+                                    <div className="bg-white/50 px-3 py-1.5 rounded-xl border border-white/30">
+                                        <span className="text-xs text-gray-600">+{upcomingAlerts.length - 1} อื่นๆ</span>
+                                    </div>
+                                </div>
                             )}
                         </div>
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isTomorrow
-                                    ? 'bg-red-500 text-white animate-pulse'
-                                    : 'bg-gray-200 text-gray-700'
-                                    }`}>
-                                    {isTomorrow ? '⚡ พรุ่งนี้!' : `อีก ${daysUntil} วัน`}
-                                </span>
-                                {isHoliday && <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">วันหยุด</span>}
-                            </div>
-                            <h3 className={`font-bold text-lg mt-1 ${isHoliday ? 'text-orange-800' : 'text-indigo-800'}`}>
-                                {urgentAlert.title}
-                            </h3>
-                            <p className={`text-sm ${isHoliday ? 'text-orange-600' : 'text-indigo-600'}`}>
-                                {alertDate.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </p>
-                        </div>
-                        {upcomingAlerts.length > 1 && (
-                            <div className="text-right">
-                                <div className="bg-white/50 px-3 py-1.5 rounded-xl border border-white/30">
-                                    <span className="text-xs text-gray-600">+{upcomingAlerts.length - 1} อื่นๆ</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            })()}
+                    );
+                })()}
 
-            {/* Combined School Calendar Section */}
-            {calendarItems.length > 0 && (
-                <div ref={calendarRef} data-section="calendar" className={`bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-all duration-1000 ${isCalendarVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-                    <button
-                        onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
-                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                    >
-                        {(() => {
-                            const now = new Date();
-                            now.setHours(0, 0, 0, 0);
-                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                            const todayItem = calendarItems.find(i => i.date === todayStr);
+                {/* Combined School Calendar Section */}
+                {calendarItems.length > 0 && (
+                    <div ref={calendarRef} data-section="calendar" className={`bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-all duration-1000 ${isCalendarVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+                        <button
+                            onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                        >
+                            {(() => {
+                                const now = new Date();
+                                now.setHours(0, 0, 0, 0);
+                                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                const todayItem = calendarItems.find(i => i.date === todayStr);
 
-                            // If collapsed and has today's event, show it prominently
-                            if (!isActivitiesExpanded && todayItem) {
-                                const isHoliday = todayItem.type === 'holiday';
-                                return (
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-full ${isHoliday ? 'bg-orange-100' : 'bg-indigo-100'}`}>
-                                            {isHoliday ? (
-                                                <Sun className={`w-5 h-5 text-orange-600`} />
-                                            ) : (
-                                                <CalendarDays className={`w-5 h-5 text-indigo-600`} />
-                                            )}
-                                        </div>
-                                        <div className="text-left">
-                                            <h3 className={`font-bold text-lg ${isHoliday ? 'text-orange-700' : 'text-indigo-700'}`}>
-                                                {todayItem.title}
-                                            </h3>
-                                            <p className={`text-xs font-medium ${isHoliday ? 'text-orange-500' : 'text-indigo-500'}`}>
-                                                📍 วันนี้ {todayItem.description && todayItem.description !== 'วันหยุด' ? `• ${todayItem.description}` : ''}
-                                            </p>
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            // Default view (expanded or no today event)
-                            return (
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-brand-100 p-2 rounded-full">
-                                        <CalendarDays className="w-5 h-5 text-brand-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <h3 className="font-bold text-gray-900 text-sm">
-                                            ปฏิทินโรงเรียน
-                                            <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
-                                                {calendarItems.length} รายการ
-                                            </span>
-                                        </h3>
-                                        {(() => {
-                                            if (todayItem) {
-                                                return (
-                                                    <p className={`text-xs font-medium flex items-center gap-1 ${todayItem.type === 'holiday' ? 'text-orange-600' : 'text-indigo-600'}`}>
-                                                        <Sun className="w-3 h-3" /> วันนี้: {todayItem.title}
-                                                    </p>
-                                                );
-                                            }
-
-                                            const nextItem = calendarItems.find(i => i.date > todayStr);
-                                            if (nextItem) {
-                                                const [nY, nM, nD] = nextItem.date.split('-').map(Number);
-                                                const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                                                const daysText = days === 0 ? 'วันนี้' : days === 1 ? 'พรุ่งนี้' : `อีก ${days} วัน`;
-                                                return (
-                                                    <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                                                        <Clock className="w-3 h-3" /> {nextItem.title} ({daysText})
-                                                    </p>
-                                                );
-                                            }
-                                            return <p className="text-xs text-gray-400">ไม่มีรายการเร็วๆ นี้</p>;
-                                        })()}
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                        {isActivitiesExpanded ? (
-                            <ChevronUp className="w-5 h-5 text-gray-400" />
-                        ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                        )}
-                    </button>
-
-                    {isActivitiesExpanded && (
-                        <div className="px-4 pb-3 border-t border-gray-100">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                                {calendarItems.map((item) => {
-                                    // Parse date correctly for local timezone
-                                    const [iY, iM, iD] = item.date.split('-').map(Number);
-                                    const itemDate = new Date(iY, iM - 1, iD);
-                                    const nowLocal = new Date();
-                                    const todayStrLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
-                                    const isToday = item.date === todayStrLocal;
-                                    const isHoliday = item.type === 'holiday';
-
-                                    // Activity Styles (Blue/Indigo) vs Holiday Styles (Orange/Amber)
-                                    const baseClass = isHoliday
-                                        ? "bg-orange-50/50 border-orange-100 hover:border-orange-200"
-                                        : "bg-indigo-50/50 border-indigo-100 hover:border-indigo-200";
-
-                                    const activeClass = isHoliday
-                                        ? "bg-orange-50 border-orange-300 shadow-md transform scale-[1.02]"
-                                        : "bg-indigo-50 border-indigo-300 shadow-md transform scale-[1.02]";
-
-                                    const iconClass = isHoliday
-                                        ? "bg-orange-100 text-orange-600"
-                                        : "bg-indigo-100 text-indigo-600";
-
-                                    const activeIconClass = isHoliday
-                                        ? "bg-orange-500 text-white"
-                                        : "bg-indigo-500 text-white";
-
+                                // If collapsed and has today's event, show it prominently
+                                if (!isActivitiesExpanded && todayItem) {
+                                    const isHoliday = todayItem.type === 'holiday';
                                     return (
-                                        <div key={`${item.type}-${item.id}`} className={`flex gap-3 p-3 rounded-xl border transition-all ${isToday ? activeClass : baseClass}`}>
-                                            <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg shrink-0 ${isToday ? activeIconClass : iconClass}`}>
-                                                <span className="text-lg font-bold leading-none">{itemDate.getDate()}</span>
-                                                <span className="text-[9px] uppercase font-bold leading-none mt-1">{itemDate.toLocaleDateString('th-TH', { month: 'short' })}</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-full ${isHoliday ? 'bg-orange-100' : 'bg-indigo-100'}`}>
+                                                {isHoliday ? (
+                                                    <Sun className={`w-5 h-5 text-orange-600`} />
+                                                ) : (
+                                                    <CalendarDays className={`w-5 h-5 text-indigo-600`} />
+                                                )}
                                             </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex justify-between items-start">
-                                                    <h4 className={`font-bold text-sm truncate ${isToday ? (isHoliday ? 'text-orange-900' : 'text-indigo-900') : 'text-gray-800'}`}>
-                                                        {item.title}
-                                                    </h4>
-                                                    {isHoliday && <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-200 text-orange-800 font-bold ml-2">หยุด</span>}
-                                                </div>
-                                                <p className="text-xs text-gray-500 line-clamp-1">{item.description || '-'}</p>
-                                                <p className={`text-[10px] mt-1 ${isToday ? (isHoliday ? 'text-orange-600 font-bold' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>
-                                                    {isToday ? 'วันนี้' : itemDate.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric' })}
+                                            <div className="text-left">
+                                                <h3 className={`font-bold text-lg ${isHoliday ? 'text-orange-700' : 'text-indigo-700'}`}>
+                                                    {todayItem.title}
+                                                </h3>
+                                                <p className={`text-xs font-medium ${isHoliday ? 'text-orange-500' : 'text-indigo-500'}`}>
+                                                    📍 วันนี้ {todayItem.description && todayItem.description !== 'วันหยุด' ? `• ${todayItem.description}` : ''}
                                                 </p>
                                             </div>
                                         </div>
                                     );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+                                }
 
-
-            {/* Combined Attendance Chart - Radial Gauge + Bar Chart */}
-            <div ref={chartRef} data-section="chart" className={`bg-white rounded-2xl p-4 md:p-6 shadow-md border border-gray-100 transition-all duration-1000 ${isChartVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
-                        <Activity className="w-4 h-4 md:w-5 md:h-5 text-brand-500" />
-                        ภาพรวมการมาเรียน
-                    </h3>
-                    <span className="text-xs text-gray-400">{new Date(currentDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span>
-                </div>
-
-                {/* Radial Gauge - Overall Attendance */}
-                <div className="flex flex-col items-center mb-6">
-                    <div className="relative w-40 h-40 md:w-48 md:h-48">
-                        {/* Background Arc */}
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                            {/* Background track */}
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="42"
-                                fill="none"
-                                stroke="#e5e7eb"
-                                strokeWidth="10"
-                                strokeLinecap="round"
-                            />
-                            {/* Progress arc with gradient */}
-                            <defs>
-                                <linearGradient id="attendanceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" stopColor="#8b5cf6" />
-                                    <stop offset="50%" stopColor="#6366f1" />
-                                    <stop offset="100%" stopColor="#3b82f6" />
-                                </linearGradient>
-                            </defs>
-                            <circle
-                                cx="50"
-                                cy="50"
-                                r="42"
-                                fill="none"
-                                stroke="url(#attendanceGradient)"
-                                strokeWidth="10"
-                                strokeLinecap="round"
-                                strokeDasharray={isChartVisible ? `${percentPresent * 2.64} 264` : '0 264'}
-                                style={{ transition: 'stroke-dasharray 2.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                            />
-                        </svg>
-                        {/* Center Text */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
-                                {percentPresent}%
-                            </div>
-                            <div className="text-xs text-gray-500 font-medium">อัตราการมาเรียนรวม</div>
-                        </div>
-                    </div>
-                    {/* Summary Stats */}
-                    <div className="grid grid-cols-4 gap-3 mt-4 w-full max-w-md">
-                        <div className="text-center p-2 rounded-xl bg-blue-50">
-                            <div className="text-lg font-bold text-blue-600">{totalStudents}</div>
-                            <div className="text-[10px] text-gray-500 font-medium">ทั้งหมด</div>
-                        </div>
-                        <div className="text-center p-2 rounded-xl bg-emerald-50">
-                            <div className="text-lg font-bold text-emerald-600">
-                                {totalPresent}<span className="text-xs text-emerald-400">/{totalStudents}</span>
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-medium">มาเรียน</div>
-                        </div>
-                        <div className="text-center p-2 rounded-xl bg-rose-50">
-                            <div className="text-lg font-bold text-rose-600">
-                                {totalAbsent}<span className="text-xs text-rose-400">/{totalStudents}</span>
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-medium">ขาด/ลา</div>
-                        </div>
-                        <div className={`text-center p-2 rounded-xl ${isAllSubmitted ? 'bg-indigo-50' : 'bg-amber-50'}`}>
-                            <div className={`text-lg font-bold ${isAllSubmitted ? 'text-indigo-600' : 'text-amber-600'}`}>
-                                {submittedClasses}/{totalClasses}
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-medium">
-                                {isAllSubmitted ? 'ครบแล้ว ✓' : 'รอบันทึก'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Divider */}
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="flex-1 h-px bg-gray-200"></div>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">รายละเอียดรายชั้นเรียน</span>
-                    <div className="flex-1 h-px bg-gray-200"></div>
-                </div>
-
-                {/* Compact Bar Chart by Grade */}
-                <div className="space-y-2">
-                    {(() => {
-                        const order = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
-                        const sortedStats = [...allStats].sort((a, b) => order.indexOf(a.grade) - order.indexOf(b.grade));
-
-                        return sortedStats.map((stat, index) => {
-                            const rate = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
-                            const isGood = rate >= 90;
-                            const isWarning = rate >= 80 && rate < 90;
-                            const isKindergarten = stat.grade.includes('อนุบาล');
-                            const animationDelay = index * 150; // Staggered animation (slower)
-
-                            // Status indicator
-                            const getStatusIcon = () => {
-                                if (!stat.isSubmitted) return <Clock className="w-3 h-3 text-gray-400" />;
-                                if (isGood) return <UserCheck className="w-3 h-3 text-emerald-500" />;
-                                if (isWarning) return <AlertTriangle className="w-3 h-3 text-amber-500" />;
-                                return <UserX className="w-3 h-3 text-rose-500" />;
-                            };
-
-                            return (
-                                <div
-                                    key={stat.grade}
-                                    className={`group hover:bg-gray-50 p-1.5 rounded-lg transition-all duration-800 ease-out ${isChartVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'}`}
-                                    style={{ transitionDelay: isChartVisible ? `${animationDelay + 300}ms` : '0ms' }}
-                                >
-                                    {/* Main row */}
-                                    <div className="flex items-center gap-2">
-                                        {/* Grade indicator */}
-                                        <div className={`w-1.5 h-8 rounded-full ${isKindergarten ? 'bg-orange-400' : 'bg-blue-400'}`}></div>
-
-                                        {/* Grade name */}
-                                        <div className="w-16 md:w-20 text-xs font-medium text-gray-700 truncate">
-                                            {stat.grade.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                                // Default view (expanded or no today event)
+                                return (
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-brand-100 p-2 rounded-full">
+                                            <CalendarDays className="w-5 h-5 text-brand-600" />
                                         </div>
+                                        <div className="text-left">
+                                            <h3 className="font-bold text-gray-900 text-sm">
+                                                ปฏิทินโรงเรียน
+                                                <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                                                    {calendarItems.length} รายการ
+                                                </span>
+                                            </h3>
+                                            {(() => {
+                                                if (todayItem) {
+                                                    return (
+                                                        <p className={`text-xs font-medium flex items-center gap-1 ${todayItem.type === 'holiday' ? 'text-orange-600' : 'text-indigo-600'}`}>
+                                                            <Sun className="w-3 h-3" /> วันนี้: {todayItem.title}
+                                                        </p>
+                                                    );
+                                                }
 
-                                        {/* Progress bar */}
-                                        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
-                                            <div
-                                                className={`h-full rounded-full ${!stat.isSubmitted ? 'bg-gray-300' :
-                                                    isGood ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                                                        isWarning ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                                                            'bg-gradient-to-r from-rose-400 to-rose-500'
-                                                    }`}
-                                                style={{
-                                                    width: isChartVisible && stat.isSubmitted ? `${rate}%` : (stat.isSubmitted ? '0%' : '100%'),
-                                                    transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    transitionDelay: isChartVisible ? `${animationDelay + 500}ms` : '0ms'
-                                                }}
-                                            />
-                                            {/* Overlay text for waiting/holiday */}
-                                            {isSchoolDay && !stat.isSubmitted && (
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <span className="text-[9px] font-bold text-gray-500">รอข้อมูล</span>
-                                                </div>
-                                            )}
-                                            {!isSchoolDay && (
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <span className="text-[9px] font-bold text-gray-400">วันหยุด</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Status icon */}
-                                        <div className="w-5 flex justify-center">
-                                            {getStatusIcon()}
-                                        </div>
-
-                                        {/* Percentage */}
-                                        <div className={`w-11 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
-                                            isGood ? 'text-emerald-600' :
-                                                isWarning ? 'text-amber-600' :
-                                                    'text-rose-600'
-                                            }`}>
-                                            {stat.isSubmitted ? `${rate.toFixed(0)}%` : '-'}
+                                                const nextItem = calendarItems.find(i => i.date > todayStr);
+                                                if (nextItem) {
+                                                    const [nY, nM, nD] = nextItem.date.split('-').map(Number);
+                                                    const days = Math.ceil((new Date(nY, nM - 1, nD).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                                    const daysText = days === 0 ? 'วันนี้' : days === 1 ? 'พรุ่งนี้' : `อีก ${days} วัน`;
+                                                    return (
+                                                        <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                                                            <Clock className="w-3 h-3" /> {nextItem.title} ({daysText})
+                                                        </p>
+                                                    );
+                                                }
+                                                return <p className="text-xs text-gray-400">ไม่มีรายการเร็วๆ นี้</p>;
+                                            })()}
                                         </div>
                                     </div>
-
-                                    {/* Present/Absent counts - Below the bar */}
-                                    {stat.isSubmitted && (
-                                        <div className="flex items-center gap-2 ml-[72px] md:ml-[88px] mt-0.5 text-[10px]">
-                                            <span className="text-gray-600">
-                                                <span className="font-bold">{stat.total}</span>
-                                                <span className="text-gray-400 ml-0.5">คน</span>
-                                            </span>
-                                            <span className="text-gray-300">|</span>
-                                            <span className="text-emerald-600">
-                                                <span className="font-bold">{stat.present}</span>
-                                                <span className="text-gray-400 ml-0.5">มา</span>
-                                            </span>
-                                            <span className="text-gray-300">|</span>
-                                            <span className="text-rose-500">
-                                                <span className="font-bold">{stat.absent}</span>
-                                                <span className="text-gray-400 ml-0.5">ขาด</span>
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        });
-                    })()}
-                </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5">
-                        <UserCheck className="w-3 h-3 text-emerald-500" />
-                        <span className="text-[10px] text-gray-500">≥90% ดีมาก</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <AlertTriangle className="w-3 h-3 text-amber-500" />
-                        <span className="text-[10px] text-gray-500">80-89% พอใช้</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <UserX className="w-3 h-3 text-rose-500" />
-                        <span className="text-[10px] text-gray-500">&lt;80% ต้องปรับปรุง</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-                {/* LEFT COLUMN: Carousels */}
-                <div ref={carouselRef} data-section="carousel" className={`lg:col-span-7 flex flex-col gap-6 transition-all duration-1000 ${isCarouselVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
-                    <h3 className="text-lg font-bold text-black flex items-center gap-2">
-                        <LayoutGrid className="w-5 h-5 text-brand-500" />
-                        ข้อมูลรายระดับชั้น
-                    </h3>
-
-                    <div className="flex flex-col gap-4">
-                        {kStats.length > 0 && (
-                            <div>
-                                {renderCarousel(
-                                    "ระดับปฐมวัย",
-                                    <Baby className="w-4 h-4" />,
-                                    kStats,
-                                    kIndex,
-                                    setKIndex,
-                                    'K',
-                                    "bg-gradient-to-r from-orange-400 to-amber-400"
-                                )}
-                            </div>
-                        )}
-                        <div>
-                            {renderCarousel(
-                                "ระดับประถมศึกษา",
-                                <BookOpen className="w-4 h-4" />,
-                                pStats,
-                                pIndex,
-                                setPIndex,
-                                'P',
-                                "bg-gradient-to-r from-blue-500 to-indigo-500"
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* RIGHT COLUMN: Absent Details List */}
-                <div ref={absentRef} data-section="absent" className={`lg:col-span-5 flex flex-col gap-4 transition-all duration-1000 delay-200 ${isAbsentVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}>
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-bold text-black flex items-center gap-2">
-                            <UserX className="w-5 h-5 text-rose-500" />
-                            รายชื่อนักเรียนที่ขาดเรียน (รวม)
-                        </h3>
-                        {totalAbsent > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-bold">{totalAbsent} คน</span>}
-                    </div>
-
-                    <div className="bg-white rounded-3xl shadow-md border border-gray-200 overflow-hidden flex flex-col" style={{ maxHeight: '450px' }}>
-                        {/* Header of List */}
-                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                            <span className="text-sm font-bold text-gray-600">รายชื่อนักเรียน</span>
-                        </div>
-
-                        {/* Scrollable List */}
-                        <div className="overflow-y-auto flex-1 p-2 hover-scrollbar">
-                            {totalAbsent === 0 ? (
-                                <div className="h-40 flex flex-col items-center justify-center text-emerald-600 gap-2">
-                                    <div className="p-3 bg-emerald-50 rounded-full text-emerald-500">
-                                        <UserCheck className="w-8 h-8" />
-                                    </div>
-                                    <p className="text-sm font-bold">สุดยอด! วันนี้มาเรียนครบทุกคน</p>
-                                </div>
+                                );
+                            })()}
+                            {isActivitiesExpanded ? (
+                                <ChevronUp className="w-5 h-5 text-gray-400" />
                             ) : (
-                                <div className="space-y-3">
-                                    {/* Group students by grade */}
-                                    {(() => {
-                                        const absentStudents = attendances
-                                            .filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
-                                        const grouped: { [key: string]: AttendanceRecord[] } = {};
-                                        absentStudents.forEach(student => {
-                                            if (!grouped[student.grade]) grouped[student.grade] = [];
-                                            grouped[student.grade].push(student);
-                                        });
-                                        // Custom grade order (Kindergarten → Primary)
-                                        const gradeOrder = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
+                                <ChevronDown className="w-5 h-5 text-gray-400" />
+                            )}
+                        </button>
 
-                                        // Separate into Kindergarten and Primary
-                                        const sortedGrades = Object.entries(grouped)
-                                            .sort(([a], [b]) => {
-                                                const indexA = gradeOrder.indexOf(a);
-                                                const indexB = gradeOrder.indexOf(b);
-                                                if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-                                                if (indexA === -1) return 1;
-                                                if (indexB === -1) return -1;
-                                                return indexA - indexB;
-                                            });
+                        {isActivitiesExpanded && (
+                            <div className="px-4 pb-3 border-t border-gray-100">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                                    {calendarItems.map((item) => {
+                                        // Parse date correctly for local timezone
+                                        const [iY, iM, iD] = item.date.split('-').map(Number);
+                                        const itemDate = new Date(iY, iM - 1, iD);
+                                        const nowLocal = new Date();
+                                        const todayStrLocal = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+                                        const isToday = item.date === todayStrLocal;
+                                        const isHoliday = item.type === 'holiday';
 
-                                        const kindergartenGrades = sortedGrades.filter(([grade]) => grade.includes('อนุบาล'));
-                                        const primaryGrades = sortedGrades.filter(([grade]) => !grade.includes('อนุบาล'));
+                                        // Activity Styles (Blue/Indigo) vs Holiday Styles (Orange/Amber)
+                                        const baseClass = isHoliday
+                                            ? "bg-orange-50/50 border-orange-100 hover:border-orange-200"
+                                            : "bg-indigo-50/50 border-indigo-100 hover:border-indigo-200";
 
-                                        const renderGradeSection = ([grade, gradeStudents]: [string, AttendanceRecord[]]) => {
-                                            // Find grade stats to get total students
-                                            const gradeStat = allStats.find(s => s.grade === grade);
-                                            const totalInGrade = gradeStat?.total || gradeStudents.length;
-                                            const absentPercent = totalInGrade > 0 ? (gradeStudents.length / totalInGrade) * 100 : 0;
-                                            // Color based on school level
-                                            const isKindergarten = grade.includes('อนุบาล');
-                                            const bgColor = isKindergarten ? 'bg-orange-50 border-orange-300' : 'bg-blue-50 border-blue-300';
-                                            const textColor = isKindergarten ? 'text-orange-700' : 'text-blue-700';
-                                            const countColor = isKindergarten ? 'text-orange-600' : 'text-blue-600';
-                                            // Progress bar color based on absent percentage
-                                            const barColor = absentPercent >= 30 ? 'bg-rose-500' :
-                                                absentPercent >= 15 ? 'bg-amber-500' : 'bg-emerald-500';
-                                            const barBgColor = isKindergarten ? 'bg-orange-200' : 'bg-blue-200';
-                                            return (
-                                                <div key={grade} className="mb-3 last:mb-0">
-                                                    {/* Grade Header with Progress Bar */}
-                                                    <div className={`px-3 py-2 rounded-lg mb-2 border ${bgColor}`}>
-                                                        <div className="flex justify-between items-center mb-1.5">
-                                                            <span className={`text-xs font-bold ${textColor}`}>{grade}</span>
-                                                            <span className={`text-xs font-bold ${countColor}`}>{gradeStudents.length} / {totalInGrade} คน</span>
-                                                        </div>
-                                                        {/* Progress Bar */}
-                                                        <div className={`h-1.5 ${barBgColor} rounded-full overflow-hidden`}>
-                                                            <div
-                                                                className={`h-full ${barColor} rounded-full transition-all duration-500`}
-                                                                style={{ width: `${Math.min(absentPercent, 100)}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    {/* Students in this grade */}
-                                                    <div className="space-y-0.5">
-                                                        {gradeStudents.map((student, idx) => (
-                                                            <div key={`${student.studentId}-${idx}`} className={`flex items-center justify-between p-2.5 rounded-lg transition-colors ${idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
-                                                                } hover:bg-blue-50`}>
-                                                                <div className="flex items-center gap-2.5">
-                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${student.gender === Gender.MALE ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
-                                                                        {student.gender === Gender.MALE ? 'ช' : 'ญ'}
-                                                                    </div>
-                                                                    <div className="text-xs font-medium text-gray-800">{student.studentName}</div>
-                                                                </div>
-                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${student.status === AttendanceStatus.ABSENT ? 'bg-red-100 text-red-600' :
-                                                                    student.status === AttendanceStatus.SICK ? 'bg-blue-100 text-blue-600' :
-                                                                        'bg-purple-100 text-purple-600'
-                                                                    }`}>
-                                                                    {student.status}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        };
+                                        const activeClass = isHoliday
+                                            ? "bg-orange-50 border-orange-300 shadow-md transform scale-[1.02]"
+                                            : "bg-indigo-50 border-indigo-300 shadow-md transform scale-[1.02]";
+
+                                        const iconClass = isHoliday
+                                            ? "bg-orange-100 text-orange-600"
+                                            : "bg-indigo-100 text-indigo-600";
+
+                                        const activeIconClass = isHoliday
+                                            ? "bg-orange-500 text-white"
+                                            : "bg-indigo-500 text-white";
 
                                         return (
-                                            <>
-                                                {/* Kindergarten Section */}
-                                                {kindergartenGrades.length > 0 && (
-                                                    <div className="mb-4">
-                                                        <div className="flex items-center gap-2 mb-2 px-1">
-                                                            <Baby className="w-4 h-4 text-orange-500" />
-                                                            <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">ระดับปฐมวัย</span>
-                                                            <div className="flex-1 h-px bg-orange-200"></div>
-                                                        </div>
-                                                        {kindergartenGrades.map(renderGradeSection)}
+                                            <div key={`${item.type}-${item.id}`} className={`flex gap-3 p-3 rounded-xl border transition-all ${isToday ? activeClass : baseClass}`}>
+                                                <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg shrink-0 ${isToday ? activeIconClass : iconClass}`}>
+                                                    <span className="text-lg font-bold leading-none">{itemDate.getDate()}</span>
+                                                    <span className="text-[9px] uppercase font-bold leading-none mt-1">{itemDate.toLocaleDateString('th-TH', { month: 'short' })}</span>
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex justify-between items-start">
+                                                        <h4 className={`font-bold text-sm truncate ${isToday ? (isHoliday ? 'text-orange-900' : 'text-indigo-900') : 'text-gray-800'}`}>
+                                                            {item.title}
+                                                        </h4>
+                                                        {isHoliday && <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-200 text-orange-800 font-bold ml-2">หยุด</span>}
                                                     </div>
-                                                )}
-
-                                                {/* Primary Section */}
-                                                {primaryGrades.length > 0 && (
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-2 px-1">
-                                                            <BookOpen className="w-4 h-4 text-blue-500" />
-                                                            <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">ระดับประถมศึกษา</span>
-                                                            <div className="flex-1 h-px bg-blue-200"></div>
-                                                        </div>
-                                                        {primaryGrades.map(renderGradeSection)}
-                                                    </div>
-                                                )}
-                                            </>
+                                                    <p className="text-xs text-gray-500 line-clamp-1">{item.description || '-'}</p>
+                                                    <p className={`text-[10px] mt-1 ${isToday ? (isHoliday ? 'text-orange-600 font-bold' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>
+                                                        {isToday ? 'วันนี้' : itemDate.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric' })}
+                                                    </p>
+                                                </div>
+                                            </div>
                                         );
-                                    })()}
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+
+                {/* Combined Attendance Chart - Radial Gauge + Bar Chart */}
+                <div ref={chartRef} data-section="chart" className={`bg-white rounded-2xl p-4 md:p-6 shadow-md border border-gray-100 transition-all duration-1000 snap-start md:snap-align-none ${isChartVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
+                            <Activity className="w-4 h-4 md:w-5 md:h-5 text-brand-500" />
+                            ภาพรวมการมาเรียน
+                        </h3>
+                        <span className="text-xs text-gray-400">{new Date(currentDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+
+                    {/* Radial Gauge - Overall Attendance */}
+                    <div className="flex flex-col items-center mb-6">
+                        <div className="relative w-40 h-40 md:w-48 md:h-48">
+                            {/* Background Arc */}
+                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                {/* Background track */}
+                                <circle
+                                    cx="50"
+                                    cy="50"
+                                    r="42"
+                                    fill="none"
+                                    stroke="#e5e7eb"
+                                    strokeWidth="10"
+                                    strokeLinecap="round"
+                                />
+                                {/* Progress arc with gradient */}
+                                <defs>
+                                    <linearGradient id="attendanceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stopColor="#8b5cf6" />
+                                        <stop offset="50%" stopColor="#6366f1" />
+                                        <stop offset="100%" stopColor="#3b82f6" />
+                                    </linearGradient>
+                                </defs>
+                                <circle
+                                    cx="50"
+                                    cy="50"
+                                    r="42"
+                                    fill="none"
+                                    stroke="url(#attendanceGradient)"
+                                    strokeWidth="10"
+                                    strokeLinecap="round"
+                                    strokeDasharray={isChartVisible ? `${percentPresent * 2.64} 264` : '0 264'}
+                                    style={{ transition: 'stroke-dasharray 2.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                                />
+                            </svg>
+                            {/* Center Text */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
+                                    {percentPresent}%
+                                </div>
+                                <div className="text-xs text-gray-500 font-medium">อัตราการมาเรียนรวม</div>
+                            </div>
+                        </div>
+                        {/* Summary Stats - Mobile: 3 cols, Desktop: 4 cols */}
+                        <div className="grid grid-cols-3 lg:grid-cols-4 gap-3 mt-4 w-full max-w-lg">
+                            <div className="text-center p-2 rounded-xl bg-blue-50">
+                                <div className="text-lg font-bold text-blue-600">{totalStudents}</div>
+                                <div className="text-[10px] text-gray-500 font-medium">ทั้งหมด</div>
+                                <div className="hidden lg:block text-[9px] text-blue-500 mt-0.5">ช {totalMale} / ญ {totalFemale}</div>
+                            </div>
+                            <div className="text-center p-2 rounded-xl bg-emerald-50">
+                                <div className="text-lg font-bold text-emerald-600">{totalPresent}</div>
+                                <div className="text-[10px] text-gray-500 font-medium">มาเรียน</div>
+                                <div className="hidden lg:block text-[9px] text-emerald-500 mt-0.5">ช {presentMaleTotal} / ญ {presentFemaleTotal}</div>
+                            </div>
+                            <div className="text-center p-2 rounded-xl bg-rose-50">
+                                <div className="text-lg font-bold text-rose-600">{totalAbsent}</div>
+                                <div className="text-[10px] text-gray-500 font-medium">ขาด/ลา</div>
+                                <div className="hidden lg:block text-[9px] text-rose-500 mt-0.5">ช {absentMaleTotal} / ญ {absentFemaleTotal}</div>
+                            </div>
+                            {/* Hide on Mobile, Show on Desktop */}
+                            <div className={`hidden lg:block text-center p-2 rounded-xl ${isAllSubmitted ? 'bg-indigo-50' : 'bg-amber-50'}`}>
+                                <div className={`text-lg font-bold ${isAllSubmitted ? 'text-indigo-600' : 'text-amber-600'}`}>
+                                    {submittedClasses}/{totalClasses}
+                                </div>
+                                <div className="text-[10px] text-gray-500 font-medium">
+                                    {isAllSubmitted ? 'ครบแล้ว ✓' : 'รอบันทึก'}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Mobile Only: Gender Progress Bars - Single bar split male/female */}
+                        <div className="lg:hidden mt-4 w-full max-w-lg space-y-3">
+                            {/* มาเรียน - Single Stacked Bar */}
+                            <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1">
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                    มาเรียน ({totalPresent} คน)
+                                </div>
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                                    {/* ชาย - Left side */}
+                                    <div
+                                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-700"
+                                        style={{ width: `${totalPresent > 0 ? (presentMaleTotal / totalPresent) * 100 : 0}%` }}
+                                    />
+                                    {/* หญิง - Right side */}
+                                    <div
+                                        className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-700"
+                                        style={{ width: `${totalPresent > 0 ? (presentFemaleTotal / totalPresent) * 100 : 0}%` }}
+                                    />
+                                </div>
+                                {/* Legend + Numbers */}
+                                <div className="flex justify-between mt-2 px-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-3 h-3 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-sm" />
+                                        <span className="text-[11px] font-medium text-gray-700">ชาย {presentMaleTotal}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-3 h-3 bg-gradient-to-r from-orange-400 to-orange-500 rounded-sm" />
+                                        <span className="text-[11px] font-medium text-gray-700">หญิง {presentFemaleTotal}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ขาด/ลา - Single Stacked Bar */}
+                            {totalAbsent > 0 && (
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                    <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1">
+                                        <UserX className="w-3.5 h-3.5 text-rose-500" />
+                                        ขาด/ลา ({totalAbsent} คน)
+                                    </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                                        {/* ชาย - Left side */}
+                                        <div
+                                            className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-700"
+                                            style={{ width: `${totalAbsent > 0 ? (absentMaleTotal / totalAbsent) * 100 : 0}%` }}
+                                        />
+                                        {/* หญิง - Right side */}
+                                        <div
+                                            className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-700"
+                                            style={{ width: `${totalAbsent > 0 ? (absentFemaleTotal / totalAbsent) * 100 : 0}%` }}
+                                        />
+                                    </div>
+                                    {/* Legend + Numbers */}
+                                    <div className="flex justify-between mt-2 px-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-3 h-3 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-sm" />
+                                            <span className="text-[11px] font-medium text-gray-700">ชาย {absentMaleTotal}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-3 h-3 bg-gradient-to-r from-orange-400 to-orange-500 rounded-sm" />
+                                            <span className="text-[11px] font-medium text-gray-700">หญิง {absentFemaleTotal}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     </div>
+
+                    {/* Divider - Hide on Mobile */}
+                    <div className="hidden lg:flex items-center gap-3 mb-4">
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">รายละเอียดรายชั้นเรียน</span>
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                    </div>
+
+                    {/* Compact Bar Chart by Grade - Hide on Mobile */}
+                    <div className="hidden lg:block space-y-2">
+                        {(() => {
+                            const order = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
+                            const sortedStats = [...allStats].sort((a, b) => order.indexOf(a.grade) - order.indexOf(b.grade));
+
+                            return sortedStats.map((stat, index) => {
+                                const rate = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+                                const isGood = rate >= 90;
+                                const isWarning = rate >= 80 && rate < 90;
+                                const isKindergarten = stat.grade.includes('อนุบาล');
+                                const animationDelay = index * 150; // Staggered animation (slower)
+
+                                // Status indicator
+                                const getStatusIcon = () => {
+                                    if (!stat.isSubmitted) return <Clock className="w-3 h-3 text-gray-400" />;
+                                    if (isGood) return <UserCheck className="w-3 h-3 text-emerald-500" />;
+                                    if (isWarning) return <AlertTriangle className="w-3 h-3 text-amber-500" />;
+                                    return <UserX className="w-3 h-3 text-rose-500" />;
+                                };
+
+                                return (
+                                    <div
+                                        key={stat.grade}
+                                        className={`group hover:bg-gray-50 p-1.5 rounded-lg transition-all duration-800 ease-out ${isChartVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'}`}
+                                        style={{ transitionDelay: isChartVisible ? `${animationDelay + 300}ms` : '0ms' }}
+                                    >
+                                        {/* Main row */}
+                                        <div className="flex items-center gap-2">
+                                            {/* Grade indicator */}
+                                            <div className={`w-1.5 h-8 rounded-full ${isKindergarten ? 'bg-orange-400' : 'bg-blue-400'}`}></div>
+
+                                            {/* Grade name */}
+                                            <div className="w-16 md:w-20 text-xs font-medium text-gray-700 truncate">
+                                                {stat.grade.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                                            </div>
+
+                                            {/* Progress bar */}
+                                            <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
+                                                <div
+                                                    className={`h-full rounded-full ${!stat.isSubmitted ? 'bg-gray-300' :
+                                                        isGood ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
+                                                            isWarning ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                                                'bg-gradient-to-r from-rose-400 to-rose-500'
+                                                        }`}
+                                                    style={{
+                                                        width: isChartVisible && stat.isSubmitted ? `${rate}%` : (stat.isSubmitted ? '0%' : '100%'),
+                                                        transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                        transitionDelay: isChartVisible ? `${animationDelay + 500}ms` : '0ms'
+                                                    }}
+                                                />
+                                                {/* Overlay text for waiting/holiday */}
+                                                {isSchoolDay && !stat.isSubmitted && (
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <span className="text-[9px] font-bold text-gray-500">รอข้อมูล</span>
+                                                    </div>
+                                                )}
+                                                {!isSchoolDay && (
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <span className="text-[9px] font-bold text-gray-400">วันหยุด</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Status icon */}
+                                            <div className="w-5 flex justify-center">
+                                                {getStatusIcon()}
+                                            </div>
+
+                                            {/* Percentage */}
+                                            <div className={`w-11 text-right text-xs font-bold ${!stat.isSubmitted ? 'text-gray-400' :
+                                                isGood ? 'text-emerald-600' :
+                                                    isWarning ? 'text-amber-600' :
+                                                        'text-rose-600'
+                                                }`}>
+                                                {stat.isSubmitted ? `${rate.toFixed(0)}%` : '-'}
+                                            </div>
+                                        </div>
+
+                                        {/* Present/Absent counts - Below the bar */}
+                                        {stat.isSubmitted && (
+                                            <div className="flex items-center gap-2 ml-[72px] md:ml-[88px] mt-0.5 text-[10px]">
+                                                <span className="text-gray-600">
+                                                    <span className="font-bold">{stat.total}</span>
+                                                    <span className="text-gray-400 ml-0.5">คน</span>
+                                                </span>
+                                                <span className="text-gray-300">|</span>
+                                                <span className="text-emerald-600">
+                                                    <span className="font-bold">{stat.present}</span>
+                                                    <span className="text-gray-400 ml-0.5">มา</span>
+                                                </span>
+                                                <span className="text-gray-300">|</span>
+                                                <span className="text-rose-500">
+                                                    <span className="font-bold">{stat.absent}</span>
+                                                    <span className="text-gray-400 ml-0.5">ขาด</span>
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            });
+                        })()}
+                    </div>
+
+                    {/* Legend - Hide on Mobile */}
+                    <div className="hidden lg:flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-1.5">
+                            <UserCheck className="w-3 h-3 text-emerald-500" />
+                            <span className="text-[10px] text-gray-500">≥90% ดีมาก</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-amber-500" />
+                            <span className="text-[10px] text-gray-500">80-89% พอใช้</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <UserX className="w-3 h-3 text-rose-500" />
+                            <span className="text-[10px] text-gray-500">&lt;80% ต้องปรับปรุง</span>
+                        </div>
+                    </div>
                 </div>
 
-            </div>
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-            {/* Daily Report Modal */}
-            {showReportModal && (
-                <DailyReport
-                    students={students}
-                    attendances={attendances}
-                    date={currentDate}
-                    onClose={() => setShowReportModal(false)}
-                />
-            )}
+                    {/* LEFT COLUMN: Grade Stats */}
+                    <div ref={carouselRef} data-section="carousel" className={`lg:col-span-7 flex flex-col gap-6 transition-all duration-1000 ${isCarouselVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
+                        {/* Title - Desktop only */}
+                        <h3 className="hidden lg:flex text-lg font-bold text-black items-center gap-2">
+                            <LayoutGrid className="w-5 h-5 text-brand-500" />
+                            ข้อมูลรายระดับชั้น
+                        </h3>
+
+                        {/* MOBILE: Swipeable Widget with Donut Chart */}
+                        <div
+                            className="lg:hidden bg-white rounded-3xl shadow-lg border border-gray-200 overflow-hidden touch-pan-y flex flex-col self-start w-full mb-6 snap-start"
+                            style={{ minHeight: 'calc(100dvh - 220px)' }}
+                            onTouchStart={(e) => {
+                                setTouchStart(e.targetTouches[0].clientX);
+                                setTouchEnd(e.targetTouches[0].clientX);
+                            }}
+                            onTouchMove={(e) => setTouchEnd(e.targetTouches[0].clientX)}
+                            onTouchEnd={() => {
+                                if (!touchStart || !touchEnd) return;
+                                const distance = touchStart - touchEnd;
+                                const minSwipeDistance = 30; // ลด threshold ให้ไวขึ้น
+                                const isLeftSwipe = distance > minSwipeDistance;
+                                const isRightSwipe = distance < -minSwipeDistance;
+
+                                if (allStats.length === 0) return;
+
+                                const currentIndex = selectedMobileGrade
+                                    ? allStats.findIndex(s => s.grade === selectedMobileGrade)
+                                    : -1;
+
+                                if (isLeftSwipe) {
+                                    // Next grade - swipe left
+                                    setSwipeDirection('left');
+                                    const nextIndex = currentIndex < allStats.length - 1 ? currentIndex + 1 : 0;
+                                    setTimeout(() => {
+                                        setSelectedMobileGrade(allStats[nextIndex].grade);
+                                        setSwipeDirection(null);
+                                    }, 50);
+                                } else if (isRightSwipe) {
+                                    // Previous grade - swipe right
+                                    setSwipeDirection('right');
+                                    const prevIndex = currentIndex > 0 ? currentIndex - 1 : allStats.length - 1;
+                                    setTimeout(() => {
+                                        setSelectedMobileGrade(allStats[prevIndex].grade);
+                                        setSwipeDirection(null);
+                                    }, 50);
+                                }
+
+                                setTouchStart(0);
+                                setTouchEnd(0);
+                            }}
+                        >
+                            {/* Header - Sticky */}
+                            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-3 sticky top-0 z-10">
+                                <span className="text-white text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                                    <Activity className="w-4 h-4" />
+                                    ภาพรวมรายระดับชั้น
+                                </span>
+                            </div>
+
+                            {/* Health Status Indicator */}
+                            <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                                {(() => {
+                                    const currentGradeIndex = selectedMobileGrade ? allStats.findIndex(s => s.grade === selectedMobileGrade) : 0;
+                                    const currentStat = allStats[currentGradeIndex];
+                                    const isKindergarten = currentStat?.grade?.includes('อนุบาล');
+
+                                    // Calculate rate based on current selected grade
+                                    const gradeRate = currentStat && currentStat.total > 0
+                                        ? (currentStat.present / currentStat.total) * 100
+                                        : 0;
+
+                                    // Determine status based on grade data
+                                    let statusColor = 'bg-gray-400';
+                                    let textColor = 'text-gray-500';
+                                    let statusText = 'รอข้อมูล';
+
+                                    if (!isSchoolDay) {
+                                        statusColor = 'bg-orange-400';
+                                        textColor = 'text-orange-600';
+                                        statusText = 'วันหยุด';
+                                    } else if (currentStat?.isSubmitted) {
+                                        const absentCount = currentStat.absent || 0;
+
+                                        if (absentCount === 0) {
+                                            // 100% - everyone present
+                                            statusColor = 'bg-emerald-500';
+                                            textColor = 'text-emerald-600';
+                                            statusText = 'มาครบ';
+                                        } else if (absentCount >= 1 && absentCount <= 3) {
+                                            // 1-3 students absent
+                                            statusColor = 'bg-amber-500';
+                                            textColor = 'text-amber-600';
+                                            statusText = 'ขาดเล็กน้อย';
+                                        } else {
+                                            // More than 3 students absent
+                                            statusColor = 'bg-rose-500';
+                                            textColor = 'text-rose-600';
+                                            statusText = 'เฝ้าติดตาม';
+                                        }
+                                    }
+
+                                    return (
+                                        <div className="flex items-center justify-between relative">
+                                            {/* Left: Grade Name - Clickable */}
+                                            <button
+                                                onClick={() => setShowGradePicker(!showGradePicker)}
+                                                className={`text-lg font-bold flex items-center gap-2 ${isKindergarten ? 'text-orange-600' : 'text-blue-600'} active:opacity-70 transition-opacity`}
+                                            >
+                                                {currentStat?.grade || 'กรุณาเลือกระดับชั้น'}
+                                                <ChevronDown className={`w-4 h-4 transition-transform ${showGradePicker ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {/* Right: Grade Counter */}
+                                            {currentStat && (
+                                                <div className="text-sm font-bold text-gray-400">
+                                                    {currentGradeIndex + 1}/{allStats.length}
+                                                </div>
+                                            )}
+
+                                            {/* Grade Picker Dropdown */}
+                                            {showGradePicker && (
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 z-50 max-h-64 overflow-y-auto animate-fade-in">
+                                                    {allStats.map((stat, idx) => {
+                                                        const isKG = stat.grade.includes('อนุบาล');
+                                                        return (
+                                                            <button
+                                                                key={stat.grade}
+                                                                onClick={() => {
+                                                                    setSelectedMobileGrade(stat.grade);
+                                                                    setShowGradePicker(false);
+                                                                }}
+                                                                className={`w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 transition-colors ${stat.grade === currentStat?.grade ? 'bg-brand-50' : ''
+                                                                    } ${idx === 0 ? 'rounded-t-xl' : ''} ${idx === allStats.length - 1 ? 'rounded-b-xl' : ''}`}
+                                                            >
+                                                                <span className={`font-bold ${isKG ? 'text-orange-600' : 'text-blue-600'}`}>
+                                                                    {stat.grade}
+                                                                </span>
+                                                                <span className="text-xs text-gray-400">{stat.total} คน</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Content Area */}
+                            <div className="p-4 flex-1 flex flex-col justify-start">
+                                {selectedMobileGrade ? (
+                                    (() => {
+                                        const stat = allStats.find(s => s.grade === selectedMobileGrade);
+                                        if (!stat) return <div className="text-center text-gray-400 py-8">ไม่พบข้อมูล</div>;
+
+                                        const rate = stat.total > 0 ? (stat.present / stat.total) * 100 : 0;
+                                        const isGood = rate >= 90;
+                                        const isWarning = rate >= 80 && rate < 90;
+                                        const isKindergarten = stat.grade.includes('อนุบาล');
+
+                                        // Get absent students for this grade
+                                        const absentStudentsInGrade = stat.absentList || [];
+
+                                        return (
+                                            <div
+                                                key={stat.grade}
+                                                className="space-y-4 animate-swipe-in"
+                                            >
+                                                {/* Top Section: Donut Chart + Grade Info */}
+                                                <div className="flex items-start gap-4">
+                                                    {/* Donut Chart */}
+                                                    <div className="relative w-28 h-28 shrink-0">
+                                                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                                            {/* Background circle */}
+                                                            <circle
+                                                                cx="50"
+                                                                cy="50"
+                                                                r="40"
+                                                                fill="none"
+                                                                stroke="#e5e7eb"
+                                                                strokeWidth="12"
+                                                            />
+                                                            {/* Gradient Definitions - Status Based */}
+                                                            <defs>
+                                                                {/* Good (≥87%) - Green Gradient */}
+                                                                <linearGradient id={`donutGood-${stat.grade.replace(/\s/g, '')}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                                                    <stop offset="0%" stopColor="#10b981" />
+                                                                    <stop offset="100%" stopColor="#34d399" />
+                                                                </linearGradient>
+                                                                {/* Warning (80-86%) - Amber Gradient */}
+                                                                <linearGradient id={`donutWarning-${stat.grade.replace(/\s/g, '')}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                                                    <stop offset="0%" stopColor="#f59e0b" />
+                                                                    <stop offset="100%" stopColor="#fbbf24" />
+                                                                </linearGradient>
+                                                                {/* Bad (<80%) - Red/Orange Gradient */}
+                                                                <linearGradient id={`donutBad-${stat.grade.replace(/\s/g, '')}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                                                    <stop offset="0%" stopColor="#ef4444" />
+                                                                    <stop offset="100%" stopColor="#f97316" />
+                                                                </linearGradient>
+                                                            </defs>
+                                                            {/* Progress arc with status-based gradient */}
+                                                            <circle
+                                                                key={`donut-${stat.grade}`}
+                                                                className="animate-donut"
+                                                                cx="50"
+                                                                cy="50"
+                                                                r="40"
+                                                                fill="none"
+                                                                stroke={
+                                                                    isGood ? `url(#donutGood-${stat.grade.replace(/\s/g, '')})` :
+                                                                        isWarning ? `url(#donutWarning-${stat.grade.replace(/\s/g, '')})` :
+                                                                            `url(#donutBad-${stat.grade.replace(/\s/g, '')})`
+                                                                }
+                                                                strokeWidth="12"
+                                                                strokeLinecap="round"
+                                                                strokeDasharray={stat.isSubmitted ? `${rate * 2.51} 251` : '0 251'}
+                                                            />
+                                                        </svg>
+                                                        {/* Center Text */}
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            {stat.isSubmitted ? (
+                                                                <>
+                                                                    <span className={`text-xl font-bold ${isGood ? 'text-emerald-600' : isWarning ? 'text-amber-600' : 'text-rose-600'}`}>
+                                                                        {rate.toFixed(0)}%
+                                                                    </span>
+                                                                    <span className="text-[9px] text-gray-500">มาเรียน</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Clock className="w-6 h-6 text-gray-400" />
+                                                                    <span className="text-[9px] text-gray-400">รอข้อมูล</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        {/* Status Badge Below Donut with Neon Dot */}
+                                                        {stat.isSubmitted && (() => {
+                                                            // Status based on percentage thresholds
+                                                            let statusText = '';
+                                                            let dotColor = '';
+                                                            let bgColor = '';
+                                                            let textColor = '';
+
+                                                            if (rate >= 100) {
+                                                                statusText = 'มาเรียนครบ';
+                                                                dotColor = '#22c55e'; // green-500
+                                                                bgColor = 'bg-emerald-100';
+                                                                textColor = 'text-emerald-700';
+                                                            } else if (rate >= 87) {
+                                                                statusText = 'ขาดเล็กน้อย';
+                                                                dotColor = '#84cc16'; // lime-500
+                                                                bgColor = 'bg-lime-100';
+                                                                textColor = 'text-lime-700';
+                                                            } else if (rate >= 80) {
+                                                                statusText = 'ขาดปานกลาง';
+                                                                dotColor = '#f59e0b'; // amber-500
+                                                                bgColor = 'bg-amber-100';
+                                                                textColor = 'text-amber-700';
+                                                            } else if (rate >= 67) {
+                                                                statusText = 'ขาดหลายคน';
+                                                                dotColor = '#f97316'; // orange-500
+                                                                bgColor = 'bg-orange-100';
+                                                                textColor = 'text-orange-700';
+                                                            } else {
+                                                                statusText = 'ขาดมาก';
+                                                                dotColor = '#ef4444'; // red-500
+                                                                bgColor = 'bg-rose-100';
+                                                                textColor = 'text-rose-700';
+                                                            }
+
+                                                            return (
+                                                                <div className={`mt-2 px-3 py-1.5 text-[10px] font-bold flex items-center justify-center gap-2 ${textColor}`}>
+                                                                    {/* 3D Neon Pulsing Dot */}
+                                                                    <div className="relative">
+                                                                        {/* Outer glow */}
+                                                                        <div
+                                                                            className="absolute -inset-1 rounded-full animate-pulse opacity-60"
+                                                                            style={{
+                                                                                backgroundColor: dotColor,
+                                                                                filter: 'blur(3px)',
+                                                                                animationDuration: '1s'
+                                                                            }}
+                                                                        />
+                                                                        {/* Middle glow */}
+                                                                        <div
+                                                                            className="absolute -inset-0.5 rounded-full animate-pulse opacity-40"
+                                                                            style={{
+                                                                                backgroundColor: dotColor,
+                                                                                filter: 'blur(2px)',
+                                                                                animationDuration: '1.2s'
+                                                                            }}
+                                                                        />
+                                                                        {/* Inner solid dot with 3D effect */}
+                                                                        <div
+                                                                            className="relative w-2.5 h-2.5 rounded-full"
+                                                                            style={{
+                                                                                backgroundColor: dotColor,
+                                                                                boxShadow: `0 0 4px ${dotColor}, 0 0 8px ${dotColor}, inset 0 -1px 2px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.5)`
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    <span>{statusText}</span>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+
+                                                    {/* Grade Info - Removed grade name since moved to header */}
+                                                    <div className="flex-1">
+                                                        {/* Student Count Progress Bar */}
+                                                        <div className="mb-3">
+                                                            <div className="text-xs text-gray-500 mb-1 text-center">
+                                                                นักเรียนทั้งหมด <span className="font-bold text-gray-700">{stat.total}</span> คน
+                                                            </div>
+                                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                                                                {/* ชาย - Left side */}
+                                                                <div
+                                                                    className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 animate-progress-fill"
+                                                                    style={{
+                                                                        width: `${stat.total > 0 ? (stat.male / stat.total) * 100 : 0}%`
+                                                                    }}
+                                                                />
+                                                                {/* หญิง - Right side */}
+                                                                <div
+                                                                    className="h-full bg-gradient-to-r from-orange-400 to-orange-500 animate-progress-fill"
+                                                                    style={{
+                                                                        width: `${stat.total > 0 ? (stat.female / stat.total) * 100 : 0}%`,
+                                                                        animationDelay: '0.15s'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex justify-between mt-1 px-0.5">
+                                                                <div className="flex items-center gap-1">
+                                                                    <div className="w-2 h-2 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-sm" />
+                                                                    <span className="text-[10px] font-medium text-gray-600">ชาย {stat.male}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    <div className="w-2 h-2 bg-gradient-to-r from-orange-400 to-orange-500 rounded-sm" />
+                                                                    <span className="text-[10px] font-medium text-gray-600">หญิง {stat.female}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {stat.isSubmitted && (
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div className="bg-gradient-to-br from-emerald-100 to-emerald-50 rounded-xl p-2.5 text-center border-2 border-emerald-200 shadow-sm">
+                                                                    <div className="text-xl font-bold text-emerald-700">{stat.present}</div>
+                                                                    <div className="text-[10px] font-semibold text-emerald-600">มาเรียน</div>
+                                                                </div>
+                                                                <div className="bg-gradient-to-br from-red-100 to-red-50 rounded-xl p-2.5 text-center border-2 border-red-200 shadow-sm">
+                                                                    <div className="text-xl font-bold text-red-700">{stat.absent}</div>
+                                                                    <div className="text-[10px] font-semibold text-red-600">ขาด/ลา</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Holiday/Waiting Overlay */}
+                                                {!stat.isSubmitted && isSchoolDay && (
+                                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                                                        <div className="text-sm font-bold text-amber-700">รอการบันทึกข้อมูล</div>
+                                                        <div className="text-xs text-amber-600">ยังไม่มีการส่งข้อมูลวันนี้</div>
+                                                    </div>
+                                                )}
+
+                                                {!isSchoolDay && (
+                                                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+                                                        <div className="text-sm font-bold text-orange-700">
+                                                            {todayHoliday ? todayHoliday.description : 'วันหยุดสุดสัปดาห์'}
+                                                        </div>
+                                                        <div className="text-xs text-orange-600">ไม่มีการบันทึกวันนี้</div>
+                                                    </div>
+                                                )}
+
+                                                {/* Absent Students List */}
+                                                {stat.isSubmitted && isSchoolDay && (
+                                                    <div className="border-t border-gray-100 pt-3 mt-6">
+                                                        <div className="flex items-center mb-2">
+                                                            <span className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                                                                <UserX className="w-3.5 h-3.5 text-rose-500" />
+                                                                รายชื่อนักเรียนที่ไม่มาเรียน
+                                                            </span>
+                                                        </div>
+
+                                                        {absentStudentsInGrade.length === 0 ? (
+                                                            <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                                                                <UserCheck className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                                                                <div className="text-xs font-bold text-emerald-700">ยอดเยี่ยม! มาครบทุกคน</div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                                                {absentStudentsInGrade.map((student, idx) => {
+                                                                    const statusConfig = {
+                                                                        [AttendanceStatus.ABSENT]: { label: 'ขาด', bg: 'bg-rose-100', text: 'text-rose-700' },
+                                                                        [AttendanceStatus.SICK]: { label: 'ป่วย', bg: 'bg-blue-100', text: 'text-blue-700' },
+                                                                        [AttendanceStatus.PERSONAL]: { label: 'ลา', bg: 'bg-purple-100', text: 'text-purple-700' },
+                                                                    }[student.status] || { label: '-', bg: 'bg-gray-100', text: 'text-gray-700' };
+
+                                                                    const isExpanded = expandedStudentName === `${student.studentId}-${idx}`;
+
+                                                                    return (
+                                                                        <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                                                                            <div
+                                                                                className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer active:bg-gray-100 rounded-md -ml-1 pl-1"
+                                                                                onClick={() => setExpandedStudentName(isExpanded ? null : `${student.studentId}-${idx}`)}
+                                                                            >
+                                                                                <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold ${student.gender === Gender.MALE ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'
+                                                                                    }`}>
+                                                                                    {student.studentNumber}
+                                                                                </span>
+                                                                                <span className={`text-sm font-medium text-gray-800 ${isExpanded ? 'whitespace-normal break-words' : 'truncate max-w-[140px]'}`}>
+                                                                                    {student.studentName}
+                                                                                </span>
+                                                                            </div>
+                                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ml-2 ${statusConfig.bg} ${statusConfig.text}`}>
+                                                                                {statusConfig.label}
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Navigation Dots */}
+                                                <div className="flex justify-center gap-1.5 pt-2">
+                                                    {allStats.map((s, idx) => (
+                                                        <button
+                                                            key={s.grade}
+                                                            onClick={() => setSelectedMobileGrade(s.grade)}
+                                                            className={`w-2 h-2 rounded-full transition-all ${s.grade === selectedMobileGrade
+                                                                ? 'bg-indigo-500 w-4'
+                                                                : 'bg-gray-300 hover:bg-gray-400'
+                                                                }`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    // Initial State - Auto select first grade
+                                    (() => {
+                                        // Auto-select first grade if none selected
+                                        if (allStats.length > 0 && !selectedMobileGrade) {
+                                            setTimeout(() => setSelectedMobileGrade(allStats[0].grade), 100);
+                                        }
+                                        return (
+                                            <div className="text-center py-6">
+                                                <div className="animate-spin w-8 h-8 border-4 border-indigo-200 border-t-indigo-500 rounded-full mx-auto"></div>
+                                                <div className="text-sm text-gray-500 mt-2">กำลังโหลด...</div>
+                                            </div>
+                                        );
+                                    })()
+                                )}
+                            </div>
+                        </div>
+
+                        {/* DESKTOP: Original Carousels */}
+                        <div className="hidden lg:flex flex-col gap-4">
+                            {kStats.length > 0 && (
+                                <div>
+                                    {renderCarousel(
+                                        "ระดับปฐมวัย",
+                                        <Baby className="w-4 h-4" />,
+                                        kStats,
+                                        kIndex,
+                                        setKIndex,
+                                        'K',
+                                        "bg-gradient-to-r from-orange-400 to-amber-400"
+                                    )}
+                                </div>
+                            )}
+                            <div>
+                                {renderCarousel(
+                                    "ระดับประถมศึกษา",
+                                    <BookOpen className="w-4 h-4" />,
+                                    pStats,
+                                    pIndex,
+                                    setPIndex,
+                                    'P',
+                                    "bg-gradient-to-r from-blue-500 to-indigo-500"
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Absent Details List - Desktop Only */}
+                    <div ref={absentRef} data-section="absent" className={`hidden lg:flex lg:col-span-5 flex-col gap-4 transition-all duration-1000 delay-200 ${isAbsentVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-black flex items-center gap-2">
+                                <UserX className="w-5 h-5 text-rose-500" />
+                                รายชื่อนักเรียนที่ขาดเรียน (รวม)
+                            </h3>
+                            {totalAbsent > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-bold">{totalAbsent} คน</span>}
+                        </div>
+
+                        <div className="bg-white rounded-3xl shadow-md border border-gray-200 overflow-hidden flex flex-col" style={{ maxHeight: '450px' }}>
+                            {/* Header of List */}
+                            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+                                <span className="text-sm font-bold text-gray-600">รายชื่อนักเรียน</span>
+                            </div>
+
+                            {/* Scrollable List */}
+                            <div className="overflow-y-auto flex-1 p-2 hover-scrollbar">
+                                {totalAbsent === 0 ? (
+                                    <div className="h-40 flex flex-col items-center justify-center text-emerald-600 gap-2">
+                                        <div className="p-3 bg-emerald-50 rounded-full text-emerald-500">
+                                            <UserCheck className="w-8 h-8" />
+                                        </div>
+                                        <p className="text-sm font-bold">สุดยอด! วันนี้มาเรียนครบทุกคน</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {/* Group students by grade */}
+                                        {(() => {
+                                            const absentStudents = attendances
+                                                .filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
+                                            const grouped: { [key: string]: AttendanceRecord[] } = {};
+                                            absentStudents.forEach(student => {
+                                                if (!grouped[student.grade]) grouped[student.grade] = [];
+                                                grouped[student.grade].push(student);
+                                            });
+                                            // Custom grade order (Kindergarten → Primary)
+                                            const gradeOrder = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
+
+                                            // Separate into Kindergarten and Primary
+                                            const sortedGrades = Object.entries(grouped)
+                                                .sort(([a], [b]) => {
+                                                    const indexA = gradeOrder.indexOf(a);
+                                                    const indexB = gradeOrder.indexOf(b);
+                                                    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                                                    if (indexA === -1) return 1;
+                                                    if (indexB === -1) return -1;
+                                                    return indexA - indexB;
+                                                });
+
+                                            const kindergartenGrades = sortedGrades.filter(([grade]) => grade.includes('อนุบาล'));
+                                            const primaryGrades = sortedGrades.filter(([grade]) => !grade.includes('อนุบาล'));
+
+                                            const renderGradeSection = ([grade, gradeStudents]: [string, AttendanceRecord[]]) => {
+                                                // Find grade stats to get total students
+                                                const gradeStat = allStats.find(s => s.grade === grade);
+                                                const totalInGrade = gradeStat?.total || gradeStudents.length;
+                                                const absentPercent = totalInGrade > 0 ? (gradeStudents.length / totalInGrade) * 100 : 0;
+                                                // Color based on school level
+                                                const isKindergarten = grade.includes('อนุบาล');
+                                                const bgColor = isKindergarten ? 'bg-orange-50 border-orange-300' : 'bg-blue-50 border-blue-300';
+                                                const textColor = isKindergarten ? 'text-orange-700' : 'text-blue-700';
+                                                const countColor = isKindergarten ? 'text-orange-600' : 'text-blue-600';
+                                                // Progress bar color based on absent percentage
+                                                const barColor = absentPercent >= 30 ? 'bg-rose-500' :
+                                                    absentPercent >= 15 ? 'bg-amber-500' : 'bg-emerald-500';
+                                                const barBgColor = isKindergarten ? 'bg-orange-200' : 'bg-blue-200';
+                                                return (
+                                                    <div key={grade} className="mb-3 last:mb-0">
+                                                        {/* Grade Header with Progress Bar */}
+                                                        <div className={`px-3 py-2 rounded-lg mb-2 border ${bgColor}`}>
+                                                            <div className="flex justify-between items-center mb-1.5">
+                                                                <span className={`text-xs font-bold ${textColor}`}>{grade}</span>
+                                                                <span className={`text-xs font-bold ${countColor}`}>{gradeStudents.length} / {totalInGrade} คน</span>
+                                                            </div>
+                                                            {/* Progress Bar */}
+                                                            <div className={`h-1.5 ${barBgColor} rounded-full overflow-hidden`}>
+                                                                <div
+                                                                    className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                                                                    style={{ width: `${Math.min(absentPercent, 100)}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {/* Students in this grade */}
+                                                        <div className="space-y-0.5">
+                                                            {gradeStudents.map((student, idx) => (
+                                                                <div key={`${student.studentId}-${idx}`} className={`flex items-center justify-between p-2.5 rounded-lg transition-colors ${idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                                                                    } hover:bg-blue-50`}>
+                                                                    <div className="flex items-center gap-2.5">
+                                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${student.gender === Gender.MALE ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
+                                                                            {student.gender === Gender.MALE ? 'ช' : 'ญ'}
+                                                                        </div>
+                                                                        <div className="text-xs font-medium text-gray-800">{student.studentName}</div>
+                                                                    </div>
+                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${student.status === AttendanceStatus.ABSENT ? 'bg-red-100 text-red-600' :
+                                                                        student.status === AttendanceStatus.SICK ? 'bg-blue-100 text-blue-600' :
+                                                                            'bg-purple-100 text-purple-600'
+                                                                        }`}>
+                                                                        {student.status}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            };
+
+                                            return (
+                                                <>
+                                                    {/* Kindergarten Section */}
+                                                    {kindergartenGrades.length > 0 && (
+                                                        <div className="mb-4">
+                                                            <div className="flex items-center gap-2 mb-2 px-1">
+                                                                <Baby className="w-4 h-4 text-orange-500" />
+                                                                <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">ระดับปฐมวัย</span>
+                                                                <div className="flex-1 h-px bg-orange-200"></div>
+                                                            </div>
+                                                            {kindergartenGrades.map(renderGradeSection)}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Primary Section */}
+                                                    {primaryGrades.length > 0 && (
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-2 px-1">
+                                                                <BookOpen className="w-4 h-4 text-blue-500" />
+                                                                <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">ระดับประถมศึกษา</span>
+                                                                <div className="flex-1 h-px bg-blue-200"></div>
+                                                            </div>
+                                                            {primaryGrades.map(renderGradeSection)}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* Daily Report Modal */}
+                {showReportModal && (
+                    <DailyReport
+                        students={students}
+                        attendances={attendances}
+                        date={currentDate}
+                        onClose={() => setShowReportModal(false)}
+                    />
+                )}
+            </div>
         </div>
     );
 };
