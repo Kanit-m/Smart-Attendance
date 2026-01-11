@@ -126,14 +126,20 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         setLoading(true);
         setHistoryData(null); // Reset history when class changes
 
-        // Filter students based on selectedDate - include students who hadn't withdrawn by that date
-        const viewingTimestamp = new Date(selectedDate).getTime() + (24 * 60 * 60 * 1000); // End of viewing day
+        // Filter students based on selectedDate - include students who:
+        // 1. Were enrolled ON or BEFORE the viewing date
+        // 2. Hadn't withdrawn by the viewing date
+        const viewingDayEnd = new Date(selectedDate).getTime() + (24 * 60 * 60 * 1000) - 1; // 23:59:59 of viewing day
         const data = allStudents.filter(s => {
             if (s.grade !== selectedClass) return false;
+
+            // Exclude students added AFTER the viewing date
+            if (s.createdAt && s.createdAt > viewingDayEnd) return false;
+
             // Include if never withdrawn
             if (s.status !== StudentStatus.WITHDRAWN || !s.withdrawnAt) return true;
             // Include if withdrew AFTER the viewing date
-            return s.withdrawnAt > viewingTimestamp;
+            return s.withdrawnAt > viewingDayEnd;
         });
         data.sort((a, b) => (a.number || 0) - (b.number || 0));
         setStudents(data);

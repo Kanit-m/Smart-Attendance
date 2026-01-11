@@ -62,6 +62,9 @@ export const mapStudentData = (id: string, data: DocumentData): Student => {
   // 7. WithdrawnAt Mapping
   const withdrawnAt = data.withdrawnAt ? Number(data.withdrawnAt) : undefined;
 
+  // 8. CreatedAt Mapping (for enrollment date tracking)
+  const createdAt = data.createdAt ? Number(data.createdAt) : undefined;
+
   return {
     id,
     studentId,
@@ -70,6 +73,7 @@ export const mapStudentData = (id: string, data: DocumentData): Student => {
     grade,
     gender,
     status,
-    withdrawnAt
+    withdrawnAt,
+    createdAt
   };
 };

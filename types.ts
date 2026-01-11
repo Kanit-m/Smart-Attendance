@@ -33,6 +33,7 @@ export interface Student {
   gender: Gender;
   status?: StudentStatus; // สถานะนักเรียน (default: ACTIVE)
   withdrawnAt?: number; // timestamp ที่ลาออก
+  createdAt?: number; // timestamp ที่เพิ่มนักเรียนเข้าระบบ
 }
 
 // Unified User Interface for Firestore 'users' collection

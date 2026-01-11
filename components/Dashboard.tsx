@@ -262,14 +262,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         }
     };
 
-    // Filter students based on currentDate - include students who hadn't withdrawn by that date
+    // Filter students based on currentDate - include students who:
+    // 1. Were enrolled ON or BEFORE the viewing date (createdAt <= end of viewing day)
+    // 2. Hadn't withdrawn by the viewing date
     const activeStudents = useMemo(() => {
-        const viewingTimestamp = new Date(currentDate).getTime() + (24 * 60 * 60 * 1000); // End of viewing day
+        const viewingDayEnd = new Date(currentDate).getTime() + (24 * 60 * 60 * 1000) - 1; // 23:59:59 of viewing day
+        const viewingDayEndForWithdraw = new Date(currentDate).getTime() + (24 * 60 * 60 * 1000); // End of viewing day
+
         return students.filter(s => {
+            // Exclude students added AFTER the viewing date (createdAt must be on or before viewing day)
+            if (s.createdAt && s.createdAt > viewingDayEnd) return false;
+
             // Include if never withdrawn
             if (s.status !== StudentStatus.WITHDRAWN || !s.withdrawnAt) return true;
             // Include if withdrew AFTER the viewing date
-            return s.withdrawnAt > viewingTimestamp;
+            return s.withdrawnAt > viewingDayEndForWithdraw;
         });
     }, [students, currentDate]);
 
@@ -1351,8 +1358,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                             >
                                                 {/* Top Section: Donut Chart + Grade Info */}
                                                 <div className="flex items-start gap-4">
-                                                    {/* Donut Chart */}
-                                                    <div className="relative w-28 h-28 shrink-0">
+                                                    {/* Donut Chart with animation on grade change */}
+                                                    <div key={`donut-container-${stat.grade}`} className="relative w-28 h-28 shrink-0 animate-scale-in">
                                                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                                                             {/* Background circle */}
                                                             <circle

@@ -416,7 +416,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (!newStudent.studentId) return showToast('ระบุรหัสนักเรียน', 'error');
     setLoadingAction(true);
     try {
-      await setDoc(doc(db, 'students', newStudent.studentId), { ...newStudent, status: StudentStatus.ACTIVE });
+      await setDoc(doc(db, 'students', newStudent.studentId), { ...newStudent, status: StudentStatus.ACTIVE, createdAt: Date.now() });
       showToast('เพิ่มสำเร็จ', 'success');
       setNewStudent({ studentId: '', number: 0, name: '', grade: GRADE_OPTIONS[0], gender: Gender.MALE });
       if (activeTab === 1 || activeTab === 4) fetchStudents();
@@ -450,7 +450,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
               name: cols[2]?.trim() || 'ไม่ระบุชื่อ',
               grade: (cols[3] || GRADE_OPTIONS[0]).trim(),
               gender: (cols[4] || '').trim() === 'ชาย' ? Gender.MALE : Gender.FEMALE,
-              status: StudentStatus.ACTIVE
+              status: StudentStatus.ACTIVE,
+              createdAt: Date.now()
             });
             count++;
           }
@@ -576,6 +577,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       setStudents(prev => prev.map(s => s.id === editingStudent.id ? editingStudent : s));
       showToast('แก้ไขเรียบร้อย', 'success'); setEditingStudent(null);
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error'); } finally { setLoadingAction(false); }
+  };
+
+  // Migration: Add createdAt to existing students (17 Nov 2025)
+  const handleMigrateCreatedAt = async () => {
+    const confirmed = window.confirm('ยืนยันการเพิ่มวันที่ลงทะเบียนให้นักเรียนเก่าทุกคน?\n\nวันที่: 17 พ.ย. 2568 (วันเปิดใช้งานแอพ)');
+    if (!confirmed) return;
+
+    setLoadingAction(true);
+    const DEFAULT_CREATED_AT = new Date('2025-11-17T00:00:00+07:00').getTime();
+    let updated = 0, skipped = 0;
+
+    try {
+      const studentsWithoutCreatedAt = students.filter(s => !s.createdAt);
+
+      for (const student of studentsWithoutCreatedAt) {
+        await updateDoc(doc(db, 'students', student.id), { createdAt: DEFAULT_CREATED_AT });
+        updated++;
+      }
+      skipped = students.length - updated;
+
+      showToast(`Migration สำเร็จ! อัพเดท ${updated} คน, ข้าม ${skipped} คน`, 'success');
+      fetchStudents(); // Refresh data
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  // Expose to window for console access
+  (window as any).runMigration = handleMigrateCreatedAt;
+
+  // Fix specific student's createdAt date
+  // Usage: fixStudentDate('รหัสนักเรียน', '2025-12-15')
+  (window as any).fixStudentDate = async (studentId: string, dateStr: string) => {
+    const student = students.find(s => s.studentId === studentId || s.id === studentId);
+    if (!student) {
+      console.error('❌ ไม่พบนักเรียน:', studentId);
+      return;
+    }
+    const newDate = new Date(dateStr + 'T00:00:00+07:00').getTime();
+    await updateDoc(doc(db, 'students', student.id), { createdAt: newDate });
+    console.log(`✅ อัพเดท ${student.name} → createdAt = ${dateStr}`);
+    fetchStudents();
   };
 
   const handleTeacherSubmit = async (e: React.FormEvent) => {

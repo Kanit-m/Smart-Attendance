@@ -115,12 +115,29 @@ export const PrintReportPage: React.FC = () => {
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [date, isInitialized]);
 
+    // Filter students based on viewing date - exclude students added AFTER that date
+    const activeStudents = useMemo(() => {
+        const viewingDayEnd = new Date(date).getTime() + (24 * 60 * 60 * 1000) - 1; // 23:59:59 of viewing day
+
+        return students.filter(s => {
+            // Exclude students added AFTER the viewing date
+            if (s.createdAt && s.createdAt > viewingDayEnd) return false;
+
+            // Include if never withdrawn or status is active
+            if (!s.status || s.status === 'active') return true;
+            // Exclude withdrawn students
+            if (s.withdrawnAt && s.withdrawnAt <= viewingDayEnd) return false;
+
+            return true;
+        });
+    }, [students, date]);
+
     // Calculate missing classes
     const missingClasses = useMemo(() => {
-        const grades = [...new Set<string>(students.map(s => s.grade))];
+        const grades = [...new Set<string>(activeStudents.map(s => s.grade))];
         return grades
             .filter(grade => {
-                const hasStudents = students.some(s => s.grade === grade);
+                const hasStudents = activeStudents.some(s => s.grade === grade);
                 const hasAttendance = attendances.some(a => a.grade === grade);
                 return hasStudents && !hasAttendance;
             })
@@ -130,7 +147,7 @@ export const PrintReportPage: React.FC = () => {
                 if (!isKA && isKB) return 1;
                 return parseInt(a.match(/\d+/)?.[0] || '0') - parseInt(b.match(/\d+/)?.[0] || '0');
             });
-    }, [students, attendances]);
+    }, [activeStudents, attendances]);
 
     const handlePrintClick = () => {
         missingClasses.length > 0 ? setShowWarningModal(true) : window.print();
@@ -301,7 +318,7 @@ export const PrintReportPage: React.FC = () => {
             {/* Right: Preview Area */}
             <div className="flex-1 bg-gray-500 p-8 overflow-y-auto h-screen flex justify-center print:p-0 print:h-auto print:overflow-visible">
                 <DailyReportPreview
-                    students={students.filter(s => !s.status || s.status === 'active')}
+                    students={activeStudents}
                     attendances={attendances}
                     date={date}
                     dutyLog={dutyLog}
