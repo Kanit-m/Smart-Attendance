@@ -28,6 +28,46 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
     userClass = '',
 }) => {
     const [showProfile, setShowProfile] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // Check if data is stale (more than 10 minutes since page load or last refresh)
+    const [lastRefreshTime] = useState<number>(() => {
+        const cached = localStorage.getItem('last_mobile_refresh_time');
+        return cached ? parseInt(cached) : Date.now();
+    });
+    const [isDataStale, setIsDataStale] = useState(() => {
+        const cached = localStorage.getItem('last_mobile_refresh_time');
+        if (!cached) return false;
+        return (Date.now() - parseInt(cached)) > 10 * 60 * 1000; // 10 minutes
+    });
+
+    // Check staleness periodically
+    React.useEffect(() => {
+        const interval = setInterval(() => {
+            const cached = localStorage.getItem('last_mobile_refresh_time');
+            if (cached) {
+                setIsDataStale((Date.now() - parseInt(cached)) > 10 * 60 * 1000);
+            }
+        }, 30000); // Check every 30 seconds
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleRefresh = () => {
+        setIsRefreshing(true);
+        // Clear all cached data
+        localStorage.removeItem('cached_students');
+        localStorage.removeItem('cached_students_time');
+        localStorage.removeItem('cached_students_version');
+        localStorage.removeItem('cached_holidays');
+        localStorage.removeItem('cached_holidays_time');
+        localStorage.removeItem('cached_activities');
+        localStorage.removeItem('cached_activities_time');
+        // Set new refresh time
+        localStorage.setItem('last_mobile_refresh_time', Date.now().toString());
+        // Reload page after a short delay for animation
+        setTimeout(() => window.location.reload(), 500);
+    };
+
     // Show Save button when on check view (always), change color based on hasChanges
     const isOnCheckView = currentView === 'check' && onSave;
 
@@ -155,26 +195,23 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                             </div>
                         </div>
 
-                        {/* Refresh Cache Button */}
+                        {/* Refresh Cache Button - Color changes based on staleness */}
                         <button
-                            onClick={() => {
-                                // Clear all cached data
-                                localStorage.removeItem('cached_students');
-                                localStorage.removeItem('cached_students_time');
-                                localStorage.removeItem('cached_students_version');
-                                localStorage.removeItem('cached_holidays');
-                                localStorage.removeItem('cached_holidays_time');
-                                localStorage.removeItem('cached_activities');
-                                localStorage.removeItem('cached_activities_time');
-                                // Reload page
-                                window.location.reload();
-                            }}
-                            className="w-full flex items-center justify-center gap-2 py-3.5 mb-3 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold rounded-xl transition-all active:scale-[0.98]"
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            className={`w-full flex items-center justify-center gap-2 py-3.5 mb-3 font-bold rounded-xl transition-all duration-500 active:scale-[0.98] ${isRefreshing
+                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    : isDataStale
+                                        ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white animate-pulse shadow-lg'
+                                        : 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md'
+                                }`}
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                            <span>รีเฟรชข้อมูล</span>
+                            <span>
+                                {isRefreshing ? 'กำลังรีเฟรช...' : isDataStale ? '⚠️ อัพเดตข้อมูล' : '✓ อัพเดตข้อมูล'}
+                            </span>
                         </button>
 
                         {/* Logout Button */}
