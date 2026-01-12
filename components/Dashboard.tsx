@@ -5,7 +5,7 @@ import {
     ChevronRight, ChevronLeft, LayoutGrid,
     Baby, BookOpen, Activity,
     ClipboardCheck, AlertTriangle, Clock, Printer,
-    ChevronDown, ChevronUp, CalendarDays
+    ChevronDown, ChevronUp, CalendarDays, RefreshCw
 } from 'lucide-react';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore/lite';
 import { db } from '../firebase';
@@ -41,6 +41,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     // todayHoliday is now derived below
+
+    // Refresh button state for PC
+    const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isDataStale, setIsDataStale] = useState(false);
 
     // Carousel State for Kindergarten (K) and Primary (P)
     const [kIndex, setKIndex] = useState(0);
@@ -146,6 +151,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
         return () => clearTimeout(timer);
     }, [loading]);
+
+    // Check if data is stale (more than 10 minutes old)
+    useEffect(() => {
+        const checkStaleInterval = setInterval(() => {
+            const elapsed = Date.now() - lastRefreshTime;
+            setIsDataStale(elapsed > 10 * 60 * 1000); // 10 minutes
+        }, 30000); // Check every 30 seconds
+
+        return () => clearInterval(checkStaleInterval);
+    }, [lastRefreshTime]);
+
+    // Refresh data function for PC button
+    const handleRefreshData = async () => {
+        setIsRefreshing(true);
+        await fetchData(currentDate);
+        setLastRefreshTime(Date.now());
+        setIsDataStale(false);
+        setIsRefreshing(false);
+    };
 
     const fetchData = async (targetDate: string) => {
         setLoading(true);
@@ -567,6 +591,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-3">
+                        {/* Refresh Button - PC Only with Animation */}
+                        <button
+                            onClick={handleRefreshData}
+                            disabled={isRefreshing}
+                            className={`hidden md:flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-500 font-bold text-sm active:scale-95 ${isRefreshing
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : isDataStale
+                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white animate-pulse hover:from-red-600 hover:to-rose-600'
+                                    : 'bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:from-emerald-600 hover:to-green-600'
+                                }`}
+                            title={isDataStale ? 'ข้อมูลอาจไม่เป็นปัจจุบัน กดเพื่ออัพเดต' : `อัพเดตล่าสุด: ${new Date(lastRefreshTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`}
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            <span>{isRefreshing ? 'กำลังอัพเดต...' : isDataStale ? '⚠️ อัพเดตข้อมูล' : '✓ อัพเดตข้อมูล'}</span>
+                        </button>
+
                         {/* Print Report Button - Hidden on mobile */}
                         <button
                             onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}

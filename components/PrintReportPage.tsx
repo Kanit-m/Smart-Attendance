@@ -23,6 +23,19 @@ export const PrintReportPage: React.FC = () => {
     });
     const [isInitialized, setIsInitialized] = useState(false);
     const [showWarningModal, setShowWarningModal] = useState(false);
+    const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isDataStale, setIsDataStale] = useState(false);
+
+    // Check if data is stale (more than 10 minutes old)
+    useEffect(() => {
+        const checkStaleInterval = setInterval(() => {
+            const elapsed = Date.now() - lastRefreshTime;
+            setIsDataStale(elapsed > 10 * 60 * 1000); // 10 minutes
+        }, 30000); // Check every 30 seconds
+
+        return () => clearInterval(checkStaleInterval);
+    }, [lastRefreshTime]);
 
     // Helper: Load students from cache or Firestore
     const loadStudents = async () => {
@@ -155,6 +168,7 @@ export const PrintReportPage: React.FC = () => {
 
     // Refresh data - clear cache and fetch fresh
     const handleRefreshData = async () => {
+        setIsRefreshing(true);
         setLoading(true);
         const startTime = Date.now();
 
@@ -169,11 +183,18 @@ export const PrintReportPage: React.FC = () => {
             ]);
             setStudents(studentsData);
             setAttendances(attendanceData);
+
+            // Update refresh time and reset stale flag
+            setLastRefreshTime(Date.now());
+            setIsDataStale(false);
         } catch (error) {
             console.error("Error refreshing data:", error);
         } finally {
             const elapsed = Date.now() - startTime;
-            setTimeout(() => setLoading(false), Math.max(0, 1000 - elapsed));
+            setTimeout(() => {
+                setLoading(false);
+                setIsRefreshing(false);
+            }, Math.max(0, 1000 - elapsed));
         }
     };
 
@@ -207,16 +228,31 @@ export const PrintReportPage: React.FC = () => {
                                 onChange={(e) => setDate(e.target.value)}
                                 className="flex-1 border rounded-md p-2"
                             />
-                            <button
-                                onClick={handleRefreshData}
-                                className="px-3 py-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
-                                title="รีเฟรชข้อมูล"
-                            >
-                                <RefreshCw className="w-5 h-5" />
-                            </button>
                         </div>
-                        <p className="text-xs text-red-500 mt-1">
-                            * กดปุ่มรีเฟรช 🔄 เพื่อโหลดข้อมูลใหม่หลังจากมีการบันทึกเพิ่ม
+
+                        {/* Refresh Button - PC Style with Animation */}
+                        <button
+                            onClick={handleRefreshData}
+                            disabled={isRefreshing}
+                            className={`w-full mt-3 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-500 shadow-md hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98] ${isRefreshing
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : isDataStale
+                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white animate-pulse hover:from-red-600 hover:to-rose-600'
+                                    : 'bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:from-emerald-600 hover:to-green-600'
+                                }`}
+                        >
+                            <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            <span>
+                                {isRefreshing ? 'กำลังอัพเดต...' : isDataStale ? '⚠️ อัพเดตข้อมูล' : '✓ อัพเดตข้อมูล'}
+                            </span>
+                        </button>
+
+                        {/* Status Text */}
+                        <p className={`text-xs mt-2 text-center transition-colors duration-300 ${isDataStale ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                            {isDataStale
+                                ? '⏰ ข้อมูลอาจไม่เป็นปัจจุบัน กดปุ่มเพื่ออัพเดต'
+                                : `✓ อัพเดตล่าสุด: ${new Date(lastRefreshTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`
+                            }
                         </p>
                     </div>
 
