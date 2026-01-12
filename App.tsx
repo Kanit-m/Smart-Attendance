@@ -187,21 +187,8 @@ function App() {
 
   useEffect(() => {
     fetchStudents();
-    checkDataFreshness(); // Check freshness on initial load
+    checkDataFreshness(); // Check freshness on initial load only
   }, [fetchStudents, checkDataFreshness]);
-
-  // Auto-refresh students when user returns to the page (visibility change)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && currentUser) {
-        // Check if data is stale when returning to page
-        checkDataFreshness();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [checkDataFreshness, currentUser]);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
     // Sanitize input: Remove ALL whitespace and convert to lowercase
