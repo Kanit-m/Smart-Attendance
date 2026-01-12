@@ -23,6 +23,8 @@ interface TeacherPanelProps {
     allStudents?: Student[];
     onBackToAdmin?: () => void;
     onLogout: () => void;
+    isDataStale?: boolean;
+    onRefresh?: () => void;
 }
 
 const GRADE_OPTIONS = [
@@ -39,7 +41,7 @@ const STATUS_CONFIG = [
     { status: AttendanceStatus.ABSENT, label: 'ขาด', color: 'bg-rose-500 hover:bg-rose-600', text: 'text-rose-600', bg: 'bg-rose-100', icon: UserX },
 ];
 
-export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout }) => {
+export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout, isDataStale = false, onRefresh }) => {
     // Navigation & View State
     const [currentView, setCurrentView] = useState<'check' | 'dashboard' | 'school_dashboard' | 'room_history'>('school_dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
@@ -1136,6 +1138,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 saving={saving}
                 userName={currentUser.name}
                 userClass={selectedClass}
+                isDataStale={isDataStale}
+                onRefresh={onRefresh}
             />
 
             {/* Success Toast */}

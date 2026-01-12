@@ -48,6 +48,7 @@ function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
+  const [isDataStale, setIsDataStale] = useState(false); // true = needs refresh (red), false = up-to-date (green)
 
   // Check if returning user (has saved session)
   const hasSession = localStorage.getItem('app_view') && localStorage.getItem('app_view') !== 'landing';
@@ -105,7 +106,25 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Check if local cache is stale compared to server version
+  const checkDataFreshness = React.useCallback(async () => {
+    try {
+      const VERSION_KEY = 'cached_students_version';
+      const cachedVersion = localStorage.getItem(VERSION_KEY);
 
+      const versionDoc = await getDoc(doc(db, 'metadata', 'students'));
+      const serverVersion = versionDoc.exists() ? versionDoc.data()?.lastUpdated : 0;
+
+      // If server version is newer than cache, data is stale
+      const isStale = !cachedVersion || parseInt(cachedVersion) < serverVersion;
+      setIsDataStale(isStale);
+
+      return isStale;
+    } catch (e) {
+      console.error("Error checking data freshness", e);
+      return false;
+    }
+  }, []);
 
   const fetchStudents = React.useCallback(async (force = false) => {
     try {
@@ -154,6 +173,7 @@ function App() {
         localStorage.setItem(CACHE_KEY, JSON.stringify(data));
         localStorage.setItem(TIME_KEY, now.toString());
         localStorage.setItem(VERSION_KEY, now.toString());
+        setIsDataStale(false); // Data is now fresh
         if (force) alert("อัปเดตข้อมูลเรียบร้อยแล้ว");
       } catch (err) {
         console.error("Failed to save student cache", err);
@@ -167,20 +187,21 @@ function App() {
 
   useEffect(() => {
     fetchStudents();
-  }, [fetchStudents]);
+    checkDataFreshness(); // Check freshness on initial load
+  }, [fetchStudents, checkDataFreshness]);
 
   // Auto-refresh students when user returns to the page (visibility change)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && currentUser) {
-        // Silently check for updates without forcing
-        fetchStudents(false);
+        // Check if data is stale when returning to page
+        checkDataFreshness();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchStudents, currentUser]);
+  }, [checkDataFreshness, currentUser]);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
     // Sanitize input: Remove ALL whitespace and convert to lowercase
@@ -290,6 +311,8 @@ function App() {
         onLoginAdmin={() => setShowAdminLogin(true)}
         onLoginTeacher={() => setShowTeacherLogin(true)}
         onLogout={handleLogout}
+        isDataStale={isDataStale}
+        onRefresh={() => fetchStudents(true)}
       />
 
       <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'teacher' ? 'p-0 max-w-none' : ''}`}>
@@ -316,6 +339,8 @@ function App() {
               allStudents={students}
               onBackToAdmin={currentUser?.role === Role.ADMIN ? () => setView('admin') : undefined}
               onLogout={handleLogout}
+              isDataStale={isDataStale}
+              onRefresh={() => fetchStudents(true)}
             />
           </div>
         )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserCog, GraduationCap, LogOut } from 'lucide-react';
+import { UserCog, GraduationCap, LogOut, RefreshCw } from 'lucide-react';
 import { Role } from '../types';
 
 interface HeaderProps {
@@ -7,12 +7,14 @@ interface HeaderProps {
   onLoginAdmin: () => void;
   onLoginTeacher: () => void;
   onLogout: () => void;
+  isDataStale?: boolean;
+  onRefresh?: () => void;
 }
 
 // Embedded logo path
 const SCHOOL_LOGO = '/Ps logo.png';
 
-export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLoginTeacher, onLogout }) => {
+export const Header: React.FC<HeaderProps> = ({ currentUser, onLoginAdmin, onLoginTeacher, onLogout, isDataStale = false, onRefresh }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {

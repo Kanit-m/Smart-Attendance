@@ -14,6 +14,8 @@ interface TeacherBottomNavProps {
     saving?: boolean;
     userName?: string;
     userClass?: string;
+    isDataStale?: boolean;
+    onRefresh?: () => void;
 }
 
 export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
@@ -26,46 +28,27 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
     saving = false,
     userName = 'ครู',
     userClass = '',
+    isDataStale = false,
+    onRefresh,
 }) => {
     const [showProfile, setShowProfile] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Check if data is stale (more than 10 minutes since page load or last refresh)
-    const [lastRefreshTime] = useState<number>(() => {
-        const cached = localStorage.getItem('last_mobile_refresh_time');
-        return cached ? parseInt(cached) : Date.now();
-    });
-    const [isDataStale, setIsDataStale] = useState(() => {
-        const cached = localStorage.getItem('last_mobile_refresh_time');
-        if (!cached) return false;
-        return (Date.now() - parseInt(cached)) > 10 * 60 * 1000; // 10 minutes
-    });
-
-    // Check staleness periodically
-    React.useEffect(() => {
-        const interval = setInterval(() => {
-            const cached = localStorage.getItem('last_mobile_refresh_time');
-            if (cached) {
-                setIsDataStale((Date.now() - parseInt(cached)) > 10 * 60 * 1000);
-            }
-        }, 30000); // Check every 30 seconds
-        return () => clearInterval(interval);
-    }, []);
-
     const handleRefresh = () => {
         setIsRefreshing(true);
-        // Clear all cached data
-        localStorage.removeItem('cached_students');
-        localStorage.removeItem('cached_students_time');
-        localStorage.removeItem('cached_students_version');
-        localStorage.removeItem('cached_holidays');
-        localStorage.removeItem('cached_holidays_time');
-        localStorage.removeItem('cached_activities');
-        localStorage.removeItem('cached_activities_time');
-        // Set new refresh time
-        localStorage.setItem('last_mobile_refresh_time', Date.now().toString());
-        // Reload page after a short delay for animation
-        setTimeout(() => window.location.reload(), 500);
+        if (onRefresh) {
+            onRefresh();
+        } else {
+            // Fallback: Clear all cached data and reload
+            localStorage.removeItem('cached_students');
+            localStorage.removeItem('cached_students_time');
+            localStorage.removeItem('cached_students_version');
+            localStorage.removeItem('cached_holidays');
+            localStorage.removeItem('cached_holidays_time');
+            localStorage.removeItem('cached_activities');
+            localStorage.removeItem('cached_activities_time');
+            setTimeout(() => window.location.reload(), 500);
+        }
     };
 
     // Show Save button when on check view (always), change color based on hasChanges
@@ -200,10 +183,10 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                             className={`w-full flex items-center justify-center gap-2 py-3.5 mb-3 font-bold rounded-xl transition-all duration-500 active:scale-[0.98] ${isRefreshing
-                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                    : isDataStale
-                                        ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white animate-pulse shadow-lg'
-                                        : 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md'
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : isDataStale
+                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white animate-pulse shadow-lg'
+                                    : 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md'
                                 }`}
                         >
                             <svg className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
