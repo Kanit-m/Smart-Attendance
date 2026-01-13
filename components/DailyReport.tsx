@@ -105,11 +105,15 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
                 {/* Close / Print Buttons */}
                 <div className="absolute top-4 right-4 flex gap-2 print:hidden">
                     <button onClick={async () => {
-                        // Log print action to Firestore (use date as doc ID to prevent duplicates)
+                        // Log print action to Firestore with user info (use date as doc ID to prevent duplicates)
                         try {
+                            const printedBy = localStorage.getItem('currentUserName') || 'ไม่ทราบ';
+                            const role = localStorage.getItem('currentUserRole') || 'unknown';
                             await setDoc(doc(db, 'print_logs', date), {
                                 date,
-                                timestamp: Date.now()
+                                timestamp: Date.now(),
+                                printedBy,
+                                role
                             });
                         } catch (err) {
                             console.error('Failed to log print action:', err);

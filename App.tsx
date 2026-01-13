@@ -85,6 +85,9 @@ function App() {
           if (userDoc.exists()) {
             const userData = userDoc.data() as AppUser;
             setCurrentUser({ ...userData, id: user.uid });
+            // Save user info to localStorage for PrintReportPage to access
+            localStorage.setItem('currentUserName', userData.name || 'ไม่ระบุชื่อ');
+            localStorage.setItem('currentUserRole', userData.role || 'unknown');
             // Determine view based on role
             if (userData.role === Role.ADMIN) setView('admin');
             else if (userData.role === Role.TEACHER) setView('teacher');
@@ -92,12 +95,16 @@ function App() {
             // User exists in Auth but not in Firestore users collection (or deleted)
             console.error("User data not found in Firestore");
             setCurrentUser(null);
+            localStorage.removeItem('currentUserName');
+            localStorage.removeItem('currentUserRole');
           }
         } catch (e) {
           console.error("Error fetching user data", e);
         }
       } else {
         setCurrentUser(null);
+        localStorage.removeItem('currentUserName');
+        localStorage.removeItem('currentUserRole');
         setView('landing');
       }
       setIsLoadingAuth(false);

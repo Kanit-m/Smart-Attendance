@@ -167,11 +167,15 @@ export const PrintReportPage: React.FC = () => {
             setShowWarningModal(true);
             return;
         }
-        // Log print action to Firestore
+        // Log print action to Firestore with user info
         try {
+            const printedBy = localStorage.getItem('currentUserName') || 'ไม่ทราบ';
+            const role = localStorage.getItem('currentUserRole') || 'unknown';
             await setDoc(doc(db, 'print_logs', date), {
                 date,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                printedBy,
+                role
             });
         } catch (err) {
             console.error('Failed to log print action:', err);

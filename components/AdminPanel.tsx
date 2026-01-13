@@ -117,7 +117,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [chartGradeFilter, setChartGradeFilter] = useState<string>(''); // '' = all grades
   // Print monitor state
   const [monitorDate, setMonitorDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
-  const [printLog, setPrintLog] = useState<{ printed: boolean; timestamp: number | null }>({ printed: false, timestamp: null });
+  const [printLog, setPrintLog] = useState<{ printed: boolean; timestamp: number | null; printedBy: string | null; role: string | null }>({ printed: false, timestamp: null, printedBy: null, role: null });
   const [loadingPrintLog, setLoadingPrintLog] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
@@ -340,17 +340,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const fetchPrintLog = async (date: string) => {
     setLoadingPrintLog(true);
     try {
-      const docRef = doc(db, 'print_logs', date);
       const docSnap = await getDocs(query(collection(db, 'print_logs'), where('date', '==', date)));
       if (!docSnap.empty) {
         const data = docSnap.docs[0].data();
-        setPrintLog({ printed: true, timestamp: data.timestamp });
+        setPrintLog({
+          printed: true,
+          timestamp: data.timestamp,
+          printedBy: data.printedBy || null,
+          role: data.role || null
+        });
       } else {
-        setPrintLog({ printed: false, timestamp: null });
+        setPrintLog({ printed: false, timestamp: null, printedBy: null, role: null });
       }
     } catch (e) {
       console.error(e);
-      setPrintLog({ printed: false, timestamp: null });
+      setPrintLog({ printed: false, timestamp: null, printedBy: null, role: null });
     } finally {
       setLoadingPrintLog(false);
     }
@@ -1426,9 +1430,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                     {printLog.printed ? '✅ พิมพ์รายงานแล้ว' : '⏳ ยังไม่ได้พิมพ์รายงาน'}
                   </h4>
                   {printLog.printed && printLog.timestamp && (
-                    <p className="text-emerald-600 font-medium">
-                      เวลา {new Date(printLog.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
-                    </p>
+                    <div className="text-emerald-600">
+                      <p className="font-medium">
+                        เวลา {new Date(printLog.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                      </p>
+                      {printLog.printedBy && (
+                        <p className="text-sm mt-1">
+                          โดย: <span className="font-bold">{printLog.printedBy}</span>
+                          {printLog.role && (
+                            <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-emerald-200 text-emerald-700">
+                              {printLog.role === 'admin' ? 'ผู้ดูแล' : printLog.role === 'teacher' ? 'ครู' : printLog.role}
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   )}
                   <p className="text-sm text-gray-500 mt-3">
                     วันที่ {new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -1459,7 +1475,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                         setLoadingAction(true);
                         try {
                           await deleteDoc(doc(db, 'print_logs', monitorDate));
-                          setPrintLog({ printed: false, timestamp: null });
+                          setPrintLog({ printed: false, timestamp: null, printedBy: null, role: null });
                           showToast('ลบประวัติเรียบร้อย', 'success');
                           setConfirmModal(prev => ({ ...prev, isOpen: false }));
                         } catch (e) {
