@@ -4,7 +4,7 @@ import {
   UserPlus, Users, Upload, Trash2, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays
+  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -115,6 +115,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [chartEndDate, setChartEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartGradeFilter, setChartGradeFilter] = useState<string>(''); // '' = all grades
+  // Print monitor state
+  const [monitorDate, setMonitorDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [printLog, setPrintLog] = useState<{ printed: boolean; timestamp: number | null }>({ printed: false, timestamp: null });
+  const [loadingPrintLog, setLoadingPrintLog] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
   // Track if data has been loaded to prevent redundant fetches
@@ -141,8 +145,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (activeTab === 7 && !dataLoaded.calendar) {
       fetchCalendarEvents();
     }
+    if (activeTab === 8) {
+      fetchPrintLog(monitorDate);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
+
+  // Re-fetch when monitor date changes
+  useEffect(() => {
+    if (activeTab === 8) {
+      fetchPrintLog(monitorDate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monitorDate]);
 
   // Re-fetch when date changes for record times tab
   useEffect(() => {
@@ -318,6 +333,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       showToast("โหลดข้อมูลปฏิทินไม่สำเร็จ", 'error');
     } finally {
       setLoadingActivities(false);
+    }
+  };
+
+  // Fetch print log for monitor tab
+  const fetchPrintLog = async (date: string) => {
+    setLoadingPrintLog(true);
+    try {
+      const docRef = doc(db, 'print_logs', date);
+      const docSnap = await getDocs(query(collection(db, 'print_logs'), where('date', '==', date)));
+      if (!docSnap.empty) {
+        const data = docSnap.docs[0].data();
+        setPrintLog({ printed: true, timestamp: data.timestamp });
+      } else {
+        setPrintLog({ printed: false, timestamp: null });
+      }
+    } catch (e) {
+      console.error(e);
+      setPrintLog({ printed: false, timestamp: null });
+    } finally {
+      setLoadingPrintLog(false);
     }
   };
 
@@ -709,6 +744,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 4, label: 'ลบ/แก้', icon: Trash2 },
     { id: 6, label: 'เวลาบันทึก', icon: Clock },
     { id: 7, label: 'ปฏิทิน', icon: CalendarDays },
+    { id: 8, label: 'มอนิเตอร์', icon: Printer },
   ];
 
   return (
@@ -1349,6 +1385,98 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   );
                 });
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 8: Monitor - Print Report Status */}
+        {activeTab === 8 && (
+          <div className="space-y-6 max-w-xl mx-auto animate-fade-in">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="text-lg font-bold mb-5 flex items-center gap-2 text-black border-b border-gray-100 pb-3">
+                <Printer className="w-5 h-5 text-brand-600" /> มอนิเตอร์การพิมพ์รายงาน
+              </h3>
+
+              {/* Date Picker */}
+              <div className="mb-6">
+                <label className="text-sm font-bold text-gray-700 block mb-2">เลือกวันที่</label>
+                <input
+                  type="date"
+                  value={monitorDate}
+                  onChange={(e) => setMonitorDate(e.target.value)}
+                  className={INPUT_STYLE}
+                />
+              </div>
+
+              {/* Status Display */}
+              {loadingPrintLog ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+                </div>
+              ) : (
+                <div className={`rounded-2xl p-8 text-center ${printLog.printed ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-amber-50 border-2 border-amber-200'}`}>
+                  <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-4 ${printLog.printed ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                    {printLog.printed ? (
+                      <CheckCircle className="w-10 h-10 text-emerald-600" />
+                    ) : (
+                      <Clock className="w-10 h-10 text-amber-600" />
+                    )}
+                  </div>
+                  <h4 className={`text-2xl font-bold mb-2 ${printLog.printed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                    {printLog.printed ? '✅ พิมพ์รายงานแล้ว' : '⏳ ยังไม่ได้พิมพ์รายงาน'}
+                  </h4>
+                  {printLog.printed && printLog.timestamp && (
+                    <p className="text-emerald-600 font-medium">
+                      เวลา {new Date(printLog.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-500 mt-3">
+                    วันที่ {new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
+
+              {/* Refresh Button */}
+              <button
+                onClick={() => fetchPrintLog(monitorDate)}
+                disabled={loadingPrintLog}
+                className={`${BTN_SECONDARY} w-full mt-4 flex items-center justify-center gap-2`}
+              >
+                <RotateCcw className={`w-4 h-4 ${loadingPrintLog ? 'animate-spin' : ''}`} />
+                รีเฟรช
+              </button>
+
+              {/* Delete Button - Only show when printed */}
+              {printLog.printed && (
+                <button
+                  onClick={() => {
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'ลบประวัติการพิมพ์',
+                      message: `ยืนยันลบประวัติการพิมพ์วันที่ ${new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}?`,
+                      isDangerous: true,
+                      action: async () => {
+                        setLoadingAction(true);
+                        try {
+                          await deleteDoc(doc(db, 'print_logs', monitorDate));
+                          setPrintLog({ printed: false, timestamp: null });
+                          showToast('ลบประวัติเรียบร้อย', 'success');
+                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                        } catch (e) {
+                          console.error(e);
+                          showToast('เกิดข้อผิดพลาด', 'error');
+                        } finally {
+                          setLoadingAction(false);
+                        }
+                      }
+                    });
+                  }}
+                  className={`${BTN_DANGER} w-full mt-2 flex items-center justify-center gap-2`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  ลบประวัติการพิมพ์
+                </button>
+              )}
             </div>
           </div>
         )}

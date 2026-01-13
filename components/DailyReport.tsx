@@ -1,5 +1,7 @@
 import React from 'react';
 import { X, Printer } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore/lite';
+import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
 
 interface DailyReportProps {
@@ -98,7 +100,18 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
             <div className="bg-white w-[210mm] min-h-[297mm] p-[5mm] shadow-2xl my-8 print:shadow-none print:m-0 print:w-full relative daily-report-container">
                 {/* Close / Print Buttons */}
                 <div className="absolute top-4 right-4 flex gap-2 print:hidden">
-                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm">
+                    <button onClick={async () => {
+                        // Log print action to Firestore (use date as doc ID to prevent duplicates)
+                        try {
+                            await setDoc(doc(db, 'print_logs', date), {
+                                date,
+                                timestamp: Date.now()
+                            });
+                        } catch (err) {
+                            console.error('Failed to log print action:', err);
+                        }
+                        window.print();
+                    }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm">
                         <Printer className="w-4 h-4" /> พิมพ์
                     </button>
                     <button onClick={onClose} className="bg-gray-200 text-gray-700 p-2 rounded-lg hover:bg-gray-300"><X className="w-5 h-5" /></button>

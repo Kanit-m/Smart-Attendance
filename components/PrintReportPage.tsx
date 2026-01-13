@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getDocs, collection, query, orderBy, where } from 'firebase/firestore/lite';
+import { getDocs, collection, query, orderBy, where, doc, setDoc } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord } from '../types';
 import { mapStudentData } from '../utils';
@@ -162,8 +162,21 @@ export const PrintReportPage: React.FC = () => {
             });
     }, [activeStudents, attendances]);
 
-    const handlePrintClick = () => {
-        missingClasses.length > 0 ? setShowWarningModal(true) : window.print();
+    const handlePrintClick = async () => {
+        if (missingClasses.length > 0) {
+            setShowWarningModal(true);
+            return;
+        }
+        // Log print action to Firestore
+        try {
+            await setDoc(doc(db, 'print_logs', date), {
+                date,
+                timestamp: Date.now()
+            });
+        } catch (err) {
+            console.error('Failed to log print action:', err);
+        }
+        window.print();
     };
 
     // Refresh data - clear cache and fetch fresh
