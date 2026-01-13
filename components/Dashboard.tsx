@@ -304,6 +304,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         });
     }, [students, currentDate]);
 
+    // Filter attendances to only include records for active students (exclude deleted students)
+    const validAttendances = useMemo(() => {
+        const activeStudentIds = new Set(activeStudents.map(s => s.id));
+        return attendances.filter(a => activeStudentIds.has(a.studentId));
+    }, [attendances, activeStudents]);
+
     // Memoize expensive grade statistics calculation
     const allStats = useMemo((): GradeStats[] => {
         const uniqueGrades = Array.from(new Set(activeStudents.map(s => s.grade))) as string[];
@@ -325,7 +331,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             const male = studentsInGrade.filter(s => s.gender === Gender.MALE).length;
             const female = studentsInGrade.filter(s => s.gender === Gender.FEMALE).length;
 
-            const absentRecords = attendances.filter(a =>
+            const absentRecords = validAttendances.filter(a =>
                 a.grade === grade &&
                 (a.status === AttendanceStatus.ABSENT || a.status === AttendanceStatus.SICK || a.status === AttendanceStatus.PERSONAL)
             );
@@ -334,7 +340,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             const absentMale = absentRecords.filter(a => a.gender === Gender.MALE).length;
             const absentFemale = absentRecords.filter(a => a.gender === Gender.FEMALE).length;
 
-            const presentRecords = attendances.filter(a =>
+            const presentRecords = validAttendances.filter(a =>
                 a.grade === grade &&
                 (a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE)
             );
@@ -357,7 +363,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 isSubmitted: presentCount + absentCount > 0
             };
         });
-    }, [activeStudents, attendances]);
+    }, [activeStudents, validAttendances]);
 
     // Memoize filtered stats for Kindergarten and Primary
     const kStats = useMemo(() => allStats.filter(s => s.grade.includes('อนุบาล')), [allStats]);
@@ -405,8 +411,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
     // Memoize attendance totals with gender breakdown
     const { totalAbsent, totalPresent, percentPresent, presentMaleTotal, presentFemaleTotal, absentMaleTotal, absentFemaleTotal } = useMemo(() => {
-        const absentRecords = attendances.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
-        const presentRecords = attendances.filter(a => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE);
+        const absentRecords = validAttendances.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
+        const presentRecords = validAttendances.filter(a => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE);
         return {
             totalAbsent: absentRecords.length,
             totalPresent: presentRecords.length,
@@ -416,7 +422,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
             absentMaleTotal: absentRecords.filter(a => a.gender === Gender.MALE).length,
             absentFemaleTotal: absentRecords.filter(a => a.gender === Gender.FEMALE).length
         };
-    }, [attendances, activeStudents.length]);
+    }, [validAttendances, activeStudents.length]);
 
     // Swipe Handlers - memoized to prevent recreation
     const handleTouchStart = useCallback((e: React.TouchEvent) => setTouchStart(e.targetTouches[0].clientX), []);

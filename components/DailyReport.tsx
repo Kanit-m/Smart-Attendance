@@ -27,6 +27,10 @@ const sumStats = (...statsArray: GradeStats[]): GradeStats => statsArray.reduce(
 }), { totalMale: 0, totalFemale: 0, total: 0, presentMale: 0, presentFemale: 0, presentTotal: 0, absentMale: 0, absentFemale: 0, absentTotal: 0 });
 
 export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances, date, onClose }) => {
+    // Filter attendances to only include records for students that exist in the students prop
+    const studentIds = new Set(students.map(s => s.id));
+    const validAttendances = attendances.filter(a => studentIds.has(a.studentId));
+
     // Helper to get stats for a specific grade
     const getStats = (gradePattern: string | string[]): GradeStats => {
         const targetGrades = Array.isArray(gradePattern) ? gradePattern : [gradePattern];
@@ -35,7 +39,7 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
         const totalFemale = gradeStudents.filter(s => s.gender === Gender.FEMALE).length;
         const total = totalMale + totalFemale;
 
-        const gradeAttendance = attendances.filter(a => targetGrades.includes(a.grade));
+        const gradeAttendance = validAttendances.filter(a => targetGrades.includes(a.grade));
         const absentRecs = gradeAttendance.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
         const absentMale = absentRecs.filter(a => a.gender === Gender.MALE).length;
         const absentFemale = absentRecs.filter(a => a.gender === Gender.FEMALE).length;

@@ -29,7 +29,7 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
     // Students who withdrew AFTER the report date should be included
     const reportDate = new Date(date);
     reportDate.setHours(23, 59, 59, 999); // End of day
-    
+
     const activeStudents = students.filter(s => {
         // Include ACTIVE students
         if (s.status !== StudentStatus.WITHDRAWN) return true;
@@ -41,6 +41,10 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
         return false;
     });
 
+    // Filter attendances to only include records for active students (exclude deleted students)
+    const activeStudentIds = new Set(activeStudents.map(s => s.id));
+    const validAttendances = attendances.filter(a => activeStudentIds.has(a.studentId));
+
     // Helper to get stats for a specific grade
     const getStats = (gradePattern: string | string[]): GradeStats => {
         const targetGrades = Array.isArray(gradePattern) ? gradePattern : [gradePattern];
@@ -49,7 +53,7 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
         const totalFemale = gradeStudents.filter(s => s.gender === Gender.FEMALE).length;
         const total = totalMale + totalFemale;
 
-        const gradeAttendance = attendances.filter(a => targetGrades.includes(a.grade));
+        const gradeAttendance = validAttendances.filter(a => targetGrades.includes(a.grade));
         const absentRecs = gradeAttendance.filter(a => [AttendanceStatus.ABSENT, AttendanceStatus.SICK, AttendanceStatus.PERSONAL].includes(a.status));
         const absentMale = absentRecs.filter(a => a.gender === Gender.MALE).length;
         const absentFemale = absentRecs.filter(a => a.gender === Gender.FEMALE).length;
