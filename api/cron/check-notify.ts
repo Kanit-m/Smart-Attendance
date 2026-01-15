@@ -12,22 +12,29 @@ interface Profile {
 }
 
 export default async function handler(req: any, res: any) {
+    // Test mode: ?date=YYYY-MM-DD&test=true
+    const testDate = req.query?.date as string | undefined;
+    const isTestMode = req.query?.test === 'true';
+
     // Get current time in Thailand timezone
     const now = new Date();
     const thaiTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
     const currentHour = thaiTime.getHours();
     const currentMinute = thaiTime.getMinutes();
     const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
-    const today = thaiTime.toLocaleDateString('sv-SE');
-    const thaiDate = thaiTime.toLocaleDateString('th-TH', {
+
+    // Use test date if provided, otherwise use today
+    const today = testDate || thaiTime.toLocaleDateString('sv-SE');
+    const dateForDisplay = testDate ? new Date(testDate) : thaiTime;
+    const thaiDate = dateForDisplay.toLocaleDateString('th-TH', {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
     });
 
-    // Check if it's weekend
-    const dayOfWeek = thaiTime.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
+    // Check if it's weekend (skip in test mode)
+    const dayOfWeek = dateForDisplay.getDay();
+    if (!isTestMode && (dayOfWeek === 0 || dayOfWeek === 6)) {
         return res.status(200).json({ message: 'Weekend - skipping', time: currentTime });
     }
 
@@ -196,17 +203,25 @@ export default async function handler(req: any, res: any) {
                 continue;
             }
 
-            // Check schedules
-            let matchedSchedule = null;
-            for (const schedule of profile.schedules) {
-                if (!schedule.enabled || !schedule.time) continue;
+            // Check schedules (skip in test mode - use first summary schedule or default)
+            let matchedSchedule: { time: string; enabled: boolean; type: string } | null = null;
 
-                const [schedHour, schedMin] = schedule.time.split(':').map(Number);
-                const schedMinutes = schedHour * 60 + schedMin;
+            if (isTestMode) {
+                // In test mode, use first enabled schedule or create a summary one
+                matchedSchedule = profile.schedules.find(s => s.enabled && s.type === 'summary')
+                    || profile.schedules.find(s => s.enabled)
+                    || { time: currentTime, enabled: true, type: 'summary' };
+            } else {
+                for (const schedule of profile.schedules) {
+                    if (!schedule.enabled || !schedule.time) continue;
 
-                if (Math.abs(currentMinutes - schedMinutes) <= 2) {
-                    matchedSchedule = schedule;
-                    break;
+                    const [schedHour, schedMin] = schedule.time.split(':').map(Number);
+                    const schedMinutes = schedHour * 60 + schedMin;
+
+                    if (Math.abs(currentMinutes - schedMinutes) <= 2) {
+                        matchedSchedule = schedule;
+                        break;
+                    }
                 }
             }
 
