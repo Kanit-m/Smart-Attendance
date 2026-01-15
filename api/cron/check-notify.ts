@@ -134,13 +134,14 @@ export default async function handler(req: any, res: any) {
                 students.forEach((doc: any) => {
                     const fields = doc.fields || {};
                     const isActive = fields.isActive?.booleanValue !== false;
-                    const className = fields.class?.stringValue || '';
+                    // Use 'grade' field to match Dashboard.tsx (was using 'class' incorrectly)
+                    const gradeName = fields.grade?.stringValue || '';
 
-                    if (isActive && className) {
-                        allClasses.add(className);
+                    if (isActive && gradeName) {
+                        allClasses.add(gradeName);
                         activeStudents.push({
                             id: doc.name.split('/').pop(),
-                            class: className
+                            grade: gradeName
                         });
                     }
                 });
@@ -156,7 +157,7 @@ export default async function handler(req: any, res: any) {
                         const student = activeStudents.find(s => s.id === studentId);
 
                         if (student) {
-                            checkedClasses.add(student.class);
+                            checkedClasses.add(student.grade);
                             if (status === 'present' || status === 'late') {
                                 presentCount++;
                             } else if (status === 'absent' || status === 'leave' || status === 'sick') {
