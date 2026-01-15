@@ -181,9 +181,10 @@ export default async function handler(req: any, res: any) {
                             checkedClasses.add(grade);
                         }
 
-                        if (status === 'present' || status === 'late') {
+                        // Status values are in Thai (from types.ts AttendanceStatus)
+                        if (status === 'มาเรียน' || status === 'สาย') {
                             presentCount++;
-                        } else if (status === 'absent' || status === 'leave' || status === 'sick') {
+                        } else if (status === 'ขาด' || status === 'ลากิจ' || status === 'ลาป่วย') {
                             absentCount++;
                         }
                     });
