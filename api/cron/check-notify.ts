@@ -2,29 +2,6 @@
 // เรียกจาก cron-job.org ทุก 5 นาที
 // ตรวจสอบเวลาจาก Firestore settings
 
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Initialize Firebase Admin (only once)
-if (getApps().length === 0) {
-    // Use environment variables for Firebase Admin credentials
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    if (projectId) {
-        initializeApp({
-            projectId: projectId,
-        });
-    }
-}
-
-interface NotificationSettings {
-    enabled: boolean;
-    lineGroupId: string;
-    lineChannelToken: string;
-    schedules: Array<{ time: string; enabled: boolean; type: string }>;
-    templates: { reminder: string; summary: string };
-    lastSent?: { [time: string]: string }; // Track last sent date per time slot
-}
-
 export default async function handler(req: any, res: any) {
     // Get current time in Thailand timezone
     const now = new Date();
@@ -33,6 +10,11 @@ export default async function handler(req: any, res: any) {
     const currentMinute = thaiTime.getMinutes();
     const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
     const today = thaiTime.toLocaleDateString('sv-SE');
+    const thaiDate = thaiTime.toLocaleDateString('th-TH', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
 
     // Check if it's weekend
     const dayOfWeek = thaiTime.getDay();
@@ -41,37 +23,60 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        // Get Firestore instance
-        const db = getFirestore();
+        // Use Firebase REST API to get settings
+        const projectId = process.env.FIREBASE_PROJECT_ID || 'kanit-smart-attendance';
+        const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/notifications`;
 
-        // Get notification settings from Firestore
-        const settingsDoc = await db.collection('settings').doc('notifications').get();
+        const settingsResponse = await fetch(firestoreUrl);
 
-        if (!settingsDoc.exists) {
+        if (!settingsResponse.ok) {
             return res.status(200).json({ message: 'No settings found', time: currentTime });
         }
 
-        const settings = settingsDoc.data() as NotificationSettings;
+        const settingsData = await settingsResponse.json();
+        const fields = settingsData.fields || {};
 
-        if (!settings.enabled) {
+        // Parse settings from Firestore REST response
+        const enabled = fields.enabled?.booleanValue || false;
+        const lineGroupId = fields.lineGroupId?.stringValue || '';
+        const lineChannelToken = fields.lineChannelToken?.stringValue || '';
+        const schedulesArray = fields.schedules?.arrayValue?.values || [];
+        const templates = {
+            reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
+            summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
+        };
+        const lastSent = fields.lastSent?.mapValue?.fields || {};
+
+        if (!enabled) {
             return res.status(200).json({ message: 'Notifications disabled', time: currentTime });
         }
 
-        // Check if current time matches any schedule (with 5-minute tolerance)
+        if (!lineGroupId || !lineChannelToken) {
+            return res.status(200).json({ message: 'Missing Line config', time: currentTime });
+        }
+
+        // Parse schedules
+        const schedules = schedulesArray.map((s: any) => ({
+            time: s.mapValue?.fields?.time?.stringValue || '',
+            enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
+            type: s.mapValue?.fields?.type?.stringValue || 'reminder'
+        }));
+
+        // Check if current time matches any schedule (with 2-minute tolerance)
         const currentMinutes = currentHour * 60 + currentMinute;
         let matchedSchedule = null;
 
-        for (const schedule of settings.schedules) {
-            if (!schedule.enabled) continue;
+        for (const schedule of schedules) {
+            if (!schedule.enabled || !schedule.time) continue;
 
             const [schedHour, schedMin] = schedule.time.split(':').map(Number);
             const schedMinutes = schedHour * 60 + schedMin;
 
-            // Check if within 5-minute window
+            // Check if within 2-minute window
             if (Math.abs(currentMinutes - schedMinutes) <= 2) {
                 // Check if already sent today for this time slot
-                const lastSentKey = schedule.time;
-                if (settings.lastSent?.[lastSentKey] === today) {
+                const lastSentDate = lastSent[schedule.time.replace(':', '_')]?.stringValue;
+                if (lastSentDate === today) {
                     continue; // Already sent today
                 }
                 matchedSchedule = schedule;
@@ -83,31 +88,55 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json({
                 message: 'No matching schedule',
                 time: currentTime,
-                schedules: settings.schedules.map(s => s.time)
+                schedules: schedules.map((s: any) => s.time)
             });
         }
 
-        // Send notification
-        const message = matchedSchedule.type === 'reminder'
-            ? settings.templates.reminder
-            : settings.templates.summary;
+        // Build message
+        const messageTemplate = matchedSchedule.type === 'reminder'
+            ? templates.reminder
+            : templates.summary;
 
+        const message = messageTemplate
+            .replace('{date}', thaiDate)
+            .replace('{present}', '0')
+            .replace('{absent}', '0')
+            .replace('{classes}', 'กำลังตรวจสอบ...');
+
+        // Send notification via Line
         const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.lineChannelToken}`
+                'Authorization': `Bearer ${lineChannelToken}`
             },
             body: JSON.stringify({
-                to: settings.lineGroupId,
-                messages: [{ type: 'text', text: message.replace('{date}', today) }]
+                to: lineGroupId,
+                messages: [{ type: 'text', text: message }]
             })
         });
 
         if (lineResponse.ok) {
-            // Update lastSent in Firestore to prevent duplicate sends
-            await db.collection('settings').doc('notifications').update({
-                [`lastSent.${matchedSchedule.time}`]: today
+            // Update lastSent in Firestore via REST API
+            const updateUrl = `${firestoreUrl}?updateMask.fieldPaths=lastSent`;
+            const timeKey = matchedSchedule.time.replace(':', '_');
+
+            await fetch(updateUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fields: {
+                        ...settingsData.fields,
+                        lastSent: {
+                            mapValue: {
+                                fields: {
+                                    ...lastSent,
+                                    [timeKey]: { stringValue: today }
+                                }
+                            }
+                        }
+                    }
+                })
             });
 
             return res.status(200).json({
