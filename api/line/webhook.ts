@@ -1,21 +1,17 @@
 // Line Webhook - รับ Group ID เมื่อ bot ถูกเชิญเข้ากลุ่ม
 
-export const config = {
-    maxDuration: 10,
-};
-
-export default async function handler(request: Request): Promise<Response> {
-    if (request.method === 'GET') {
-        // Line webhook verification
-        return Response.json({ status: 'ok' });
+export default function handler(req: any, res: any) {
+    // Line webhook verification (GET request from LINE)
+    if (req.method === 'GET') {
+        return res.status(200).json({ status: 'ok' });
     }
 
-    if (request.method !== 'POST') {
-        return Response.json({ error: 'Method not allowed' }, { status: 405 });
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
-        const body = await request.json();
+        const body = req.body || {};
         const events = body.events || [];
 
         for (const event of events) {
@@ -23,9 +19,6 @@ export default async function handler(request: Request): Promise<Response> {
             if (event.type === 'join' && event.source?.type === 'group') {
                 const groupId = event.source.groupId;
                 console.log('Bot joined group:', groupId);
-
-                // TODO: Save groupId to Firestore settings
-                // For now, just log it - admin will need to copy from logs
             }
 
             // Bot ถูกเชิญออกจากกลุ่ม
@@ -35,10 +28,10 @@ export default async function handler(request: Request): Promise<Response> {
             }
         }
 
-        return Response.json({ status: 'ok' });
+        return res.status(200).json({ status: 'ok' });
 
     } catch (error) {
         console.error('Webhook error:', error);
-        return Response.json({ error: 'Internal server error' }, { status: 500 });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
