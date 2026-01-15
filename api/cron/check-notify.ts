@@ -109,6 +109,34 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json({ message: 'No profiles found', time: currentTime });
         }
 
+        // *** OPTIMIZATION: Check if any profile has a matching schedule BEFORE fetching data ***
+        // This saves ~400 Firestore reads per cron invocation when no schedule matches
+        const currentMinutes = currentHour * 60 + currentMinute;
+
+        if (!isTestMode) {
+            // Pre-check: Find profiles that have a matching schedule
+            const profilesWithMatchingSchedule = profiles.filter(profile => {
+                if (!profile.enabled || !profile.lineGroupId || !profile.lineChannelToken) return false;
+
+                return profile.schedules.some(schedule => {
+                    if (!schedule.enabled || !schedule.time) return false;
+                    const [schedHour, schedMin] = schedule.time.split(':').map(Number);
+                    const schedMinutes = schedHour * 60 + schedMin;
+                    return Math.abs(currentMinutes - schedMinutes) <= 2;
+                });
+            });
+
+            // If no profile has a matching schedule, return early without fetching data
+            if (profilesWithMatchingSchedule.length === 0) {
+                return res.status(200).json({
+                    message: 'No matching schedule - skipped data fetch',
+                    time: currentTime,
+                    profileCount: profiles.length,
+                    note: 'Saved ~400 Firestore reads by skipping'
+                });
+            }
+        }
+
         // Fetch attendance data once (shared across all profiles)
         let presentCount = 0;
         let absentCount = 0;
@@ -237,7 +265,6 @@ export default async function handler(req: any, res: any) {
             : '✅ ทุกห้องบันทึกครบแล้ว';
 
         // Process each profile
-        const currentMinutes = currentHour * 60 + currentMinute;
 
         for (const profile of profiles) {
             if (!profile.enabled || !profile.lineGroupId || !profile.lineChannelToken) {
