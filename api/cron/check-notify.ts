@@ -171,6 +171,18 @@ export default async function handler(req: any, res: any) {
                         uncheckedClasses.push(className);
                     }
                 });
+
+                // Store debug info for test mode
+                if (isTestMode) {
+                    (res as any).debugInfo = {
+                        allClasses: Array.from(allClasses),
+                        checkedClasses: Array.from(checkedClasses),
+                        uncheckedClasses,
+                        activeStudentCount: activeStudents.length,
+                        presentCount,
+                        absentCount
+                    };
+                }
             }
 
             if (printLogResponse.ok) {
@@ -275,8 +287,10 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({
             message: 'Cron completed',
             time: currentTime,
+            date: today,
             profileCount: profiles.length,
-            results
+            results,
+            ...(isTestMode && (res as any).debugInfo ? { debug: (res as any).debugInfo } : {})
         });
 
     } catch (error: any) {
