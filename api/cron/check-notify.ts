@@ -12,9 +12,10 @@ interface Profile {
 }
 
 export default async function handler(req: any, res: any) {
-    // Test mode: ?date=YYYY-MM-DD&test=true
+    // Test mode: ?date=YYYY-MM-DD&test=true&type=summary (or type=reminder)
     const testDate = req.query?.date as string | undefined;
     const isTestMode = req.query?.test === 'true';
+    const testType = (req.query?.type as string) || 'summary'; // default to summary in test mode
 
     // Get current time in Thailand timezone
     const now = new Date();
@@ -237,14 +238,12 @@ export default async function handler(req: any, res: any) {
                 continue;
             }
 
-            // Check schedules (skip in test mode - use first summary schedule or default)
+            // Check schedules (skip in test mode - use type parameter or default to summary)
             let matchedSchedule: { time: string; enabled: boolean; type: string } | null = null;
 
             if (isTestMode) {
-                // In test mode, use first enabled schedule or create a summary one
-                matchedSchedule = profile.schedules.find(s => s.enabled && s.type === 'summary')
-                    || profile.schedules.find(s => s.enabled)
-                    || { time: currentTime, enabled: true, type: 'summary' };
+                // In test mode, use the specified type (reminder or summary)
+                matchedSchedule = { time: currentTime, enabled: true, type: testType };
             } else {
                 for (const schedule of profile.schedules) {
                     if (!schedule.enabled || !schedule.time) continue;
