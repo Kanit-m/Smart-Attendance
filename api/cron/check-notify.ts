@@ -30,7 +30,14 @@ export default async function handler(req: any, res: any) {
         const settingsResponse = await fetch(firestoreUrl);
 
         if (!settingsResponse.ok) {
-            return res.status(200).json({ message: 'No settings found', time: currentTime });
+            const errorText = await settingsResponse.text();
+            return res.status(200).json({
+                message: 'No settings found',
+                time: currentTime,
+                projectId: projectId,
+                error: errorText,
+                status: settingsResponse.status
+            });
         }
 
         const settingsData = await settingsResponse.json();
