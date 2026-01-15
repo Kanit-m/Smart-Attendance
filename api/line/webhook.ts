@@ -1,18 +1,21 @@
 // Line Webhook - รับ Group ID เมื่อ bot ถูกเชิญเข้ากลุ่ม
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-    if (req.method === 'GET') {
+export const config = {
+    maxDuration: 10,
+};
+
+export default async function handler(request: Request): Promise<Response> {
+    if (request.method === 'GET') {
         // Line webhook verification
-        return res.status(200).json({ status: 'ok' });
+        return Response.json({ status: 'ok' });
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
+    if (request.method !== 'POST') {
+        return Response.json({ error: 'Method not allowed' }, { status: 405 });
     }
 
     try {
-        const body = req.body;
+        const body = await request.json();
         const events = body.events || [];
 
         for (const event of events) {
@@ -32,10 +35,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        return res.status(200).json({ status: 'ok' });
+        return Response.json({ status: 'ok' });
 
     } catch (error) {
         console.error('Webhook error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+        return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
