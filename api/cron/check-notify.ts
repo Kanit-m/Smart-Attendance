@@ -105,8 +105,8 @@ export default async function handler(req: any, res: any) {
         let printStatus = '⏳ ยังไม่พิมพ์รายงาน';
 
         try {
-            // Get students
-            const studentsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/students`;
+            // Get students (pageSize=1000 to get all students, default is only 20)
+            const studentsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/students?pageSize=1000`;
             const studentsResponse = await fetch(studentsUrl);
 
             // Get attendance
