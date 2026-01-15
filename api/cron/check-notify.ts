@@ -1,6 +1,15 @@
 // Vercel Cron Job - ตรวจสอบเวลาและส่งแจ้งเตือน
-// เรียกจาก cron-job.org ทุก 5 นาที
-// ตรวจสอบเวลาจาก Firestore settings
+// รองรับ Multi-Profile: ส่งไปหลายกลุ่ม Line ด้วยข้อความต่างกัน
+
+interface Profile {
+    id: string;
+    name: string;
+    enabled: boolean;
+    lineGroupId: string;
+    lineChannelToken: string;
+    schedules: Array<{ time: string; enabled: boolean; type: string }>;
+    templates: { reminder: string; summary: string };
+}
 
 export default async function handler(req: any, res: any) {
     // Get current time in Thailand timezone
@@ -22,125 +31,96 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ message: 'Weekend - skipping', time: currentTime });
     }
 
+    const projectId = process.env.FIREBASE_PROJECT_ID || 'tester010-1a27e';
+    const results: any[] = [];
+
     try {
-        // Use Firebase REST API to get settings
-        const projectId = process.env.FIREBASE_PROJECT_ID || 'tester010-1a27e';
-        const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/notifications`;
+        // Fetch all notification profiles
+        const profilesUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/notifications/profiles`;
+        const profilesResponse = await fetch(profilesUrl);
 
-        const settingsResponse = await fetch(firestoreUrl);
+        let profiles: Profile[] = [];
 
-        if (!settingsResponse.ok) {
-            const errorText = await settingsResponse.text();
-            return res.status(200).json({
-                message: 'No settings found',
-                time: currentTime,
-                projectId: projectId,
-                error: errorText,
-                status: settingsResponse.status
+        if (profilesResponse.ok) {
+            const profilesData = await profilesResponse.json();
+            const documents = profilesData.documents || [];
+
+            profiles = documents.map((doc: any) => {
+                const fields = doc.fields || {};
+                return {
+                    id: doc.name.split('/').pop(),
+                    name: fields.name?.stringValue || '',
+                    enabled: fields.enabled?.booleanValue || false,
+                    lineGroupId: fields.lineGroupId?.stringValue || '',
+                    lineChannelToken: fields.lineChannelToken?.stringValue || '',
+                    schedules: (fields.schedules?.arrayValue?.values || []).map((s: any) => ({
+                        time: s.mapValue?.fields?.time?.stringValue || '',
+                        enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
+                        type: s.mapValue?.fields?.type?.stringValue || 'reminder'
+                    })),
+                    templates: {
+                        reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
+                        summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
+                    }
+                };
             });
         }
 
-        const settingsData = await settingsResponse.json();
-        const fields = settingsData.fields || {};
+        // Fallback to old single-profile structure
+        if (profiles.length === 0) {
+            const oldSettingsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/notifications`;
+            const oldResponse = await fetch(oldSettingsUrl);
 
-        // Parse settings from Firestore REST response
-        const enabled = fields.enabled?.booleanValue || false;
-        const lineGroupId = fields.lineGroupId?.stringValue || '';
-        const lineChannelToken = fields.lineChannelToken?.stringValue || '';
-        const schedulesArray = fields.schedules?.arrayValue?.values || [];
-        const templates = {
-            reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
-            summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
-        };
-        const lastSent = fields.lastSent?.mapValue?.fields || {};
+            if (oldResponse.ok) {
+                const oldData = await oldResponse.json();
+                const fields = oldData.fields || {};
 
-        if (!enabled) {
-            return res.status(200).json({ message: 'Notifications disabled', time: currentTime });
-        }
-
-        if (!lineGroupId || !lineChannelToken) {
-            return res.status(200).json({ message: 'Missing Line config', time: currentTime });
-        }
-
-        // Parse schedules
-        const schedules = schedulesArray.map((s: any) => ({
-            time: s.mapValue?.fields?.time?.stringValue || '',
-            enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
-            type: s.mapValue?.fields?.type?.stringValue || 'reminder'
-        }));
-
-        // Check if current time matches any schedule (with 2-minute tolerance)
-        const currentMinutes = currentHour * 60 + currentMinute;
-        let matchedSchedule = null;
-
-        for (const schedule of schedules) {
-            if (!schedule.enabled || !schedule.time) continue;
-
-            const [schedHour, schedMin] = schedule.time.split(':').map(Number);
-            const schedMinutes = schedHour * 60 + schedMin;
-
-            // Check if within 2-minute window
-            if (Math.abs(currentMinutes - schedMinutes) <= 2) {
-                // Check if already sent today for this time slot
-                const lastSentDate = lastSent[schedule.time.replace(':', '_')]?.stringValue;
-                if (lastSentDate === today) {
-                    continue; // Already sent today
-                }
-                matchedSchedule = schedule;
-                break;
+                profiles = [{
+                    id: 'default',
+                    name: 'Default',
+                    enabled: fields.enabled?.booleanValue || false,
+                    lineGroupId: fields.lineGroupId?.stringValue || '',
+                    lineChannelToken: fields.lineChannelToken?.stringValue || '',
+                    schedules: (fields.schedules?.arrayValue?.values || []).map((s: any) => ({
+                        time: s.mapValue?.fields?.time?.stringValue || '',
+                        enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
+                        type: s.mapValue?.fields?.type?.stringValue || 'reminder'
+                    })),
+                    templates: {
+                        reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
+                        summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
+                    }
+                }];
             }
         }
 
-        if (!matchedSchedule) {
-            return res.status(200).json({
-                message: 'No matching schedule',
-                time: currentTime,
-                schedules: schedules.map((s: any) => s.time)
-            });
+        if (profiles.length === 0) {
+            return res.status(200).json({ message: 'No profiles found', time: currentTime });
         }
 
-        // Check print status from print_logs
-        let printStatus = '⏳ ยังไม่พิมพ์รายงาน';
-        let printedBy = '';
-        try {
-            const printLogUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/print_logs/${today}`;
-            const printLogResponse = await fetch(printLogUrl);
-            if (printLogResponse.ok) {
-                const printLogData = await printLogResponse.json();
-                if (printLogData.fields) {
-                    printedBy = printLogData.fields.printedBy?.stringValue || 'ไม่ระบุ';
-                    const printTime = printLogData.fields.timestamp?.timestampValue;
-                    const timeStr = printTime ? new Date(printTime).toLocaleTimeString('th-TH', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Asia/Bangkok'
-                    }) : '';
-                    printStatus = `✅ พิมพ์รายงานแล้ว (${printedBy} เวลา ${timeStr})`;
-                }
-            }
-        } catch (e) {
-            // Keep default status
-        }
-
-        // Fetch attendance data for today
+        // Fetch attendance data once (shared across all profiles)
         let presentCount = 0;
         let absentCount = 0;
         let uncheckedClasses: string[] = [];
+        let printStatus = '⏳ ยังไม่พิมพ์รายงาน';
 
         try {
-            // Get all students
+            // Get students
             const studentsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/students`;
             const studentsResponse = await fetch(studentsUrl);
 
-            // Get today's attendance
+            // Get attendance
             const attendanceUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/attendance/${today}`;
             const attendanceResponse = await fetch(attendanceUrl);
+
+            // Get print log
+            const printLogUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/print_logs/${today}`;
+            const printLogResponse = await fetch(printLogUrl);
 
             if (studentsResponse.ok) {
                 const studentsData = await studentsResponse.json();
                 const students = studentsData.documents || [];
 
-                // Get unique class names
                 const allClasses = new Set<string>();
                 const activeStudents: any[] = [];
 
@@ -158,21 +138,18 @@ export default async function handler(req: any, res: any) {
                     }
                 });
 
-                // Check attendance records
                 const checkedClasses = new Set<string>();
 
                 if (attendanceResponse.ok) {
                     const attendanceData = await attendanceResponse.json();
                     const records = attendanceData.fields?.records?.mapValue?.fields || {};
 
-                    // Count present/absent and track checked classes
                     Object.entries(records).forEach(([studentId, record]: [string, any]) => {
                         const status = record?.mapValue?.fields?.status?.stringValue || '';
                         const student = activeStudents.find(s => s.id === studentId);
 
                         if (student) {
                             checkedClasses.add(student.class);
-
                             if (status === 'present' || status === 'late') {
                                 presentCount++;
                             } else if (status === 'absent' || status === 'leave' || status === 'sick') {
@@ -182,81 +159,110 @@ export default async function handler(req: any, res: any) {
                     });
                 }
 
-                // Find unchecked classes
                 allClasses.forEach(className => {
                     if (!checkedClasses.has(className)) {
                         uncheckedClasses.push(className);
                     }
                 });
             }
+
+            if (printLogResponse.ok) {
+                const printLogData = await printLogResponse.json();
+                if (printLogData.fields) {
+                    const printedBy = printLogData.fields.printedBy?.stringValue || 'ไม่ระบุ';
+                    const printTime = printLogData.fields.timestamp?.timestampValue;
+                    const timeStr = printTime ? new Date(printTime).toLocaleTimeString('th-TH', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Asia/Bangkok'
+                    }) : '';
+                    printStatus = `✅ พิมพ์รายงานแล้ว (${printedBy} เวลา ${timeStr})`;
+                }
+            }
         } catch (e) {
-            console.error('Error fetching attendance:', e);
+            console.error('Error fetching data:', e);
         }
 
-        // Format unchecked classes list
         const classesText = uncheckedClasses.length > 0
             ? uncheckedClasses.join(', ')
             : '✅ ทุกห้องบันทึกครบแล้ว';
 
-        // Build message
-        const messageTemplate = matchedSchedule.type === 'reminder'
-            ? templates.reminder
-            : templates.summary;
+        // Process each profile
+        const currentMinutes = currentHour * 60 + currentMinute;
 
-        const message = messageTemplate
-            .replace('{date}', thaiDate)
-            .replace('{present}', presentCount.toString())
-            .replace('{absent}', absentCount.toString())
-            .replace('{classes}', classesText)
-            .replace('{printStatus}', printStatus)
-            .replace('{printedBy}', printedBy)
-            .replace('{total}', (presentCount + absentCount).toString());
+        for (const profile of profiles) {
+            if (!profile.enabled || !profile.lineGroupId || !profile.lineChannelToken) {
+                results.push({ profile: profile.name, status: 'skipped', reason: 'disabled or missing config' });
+                continue;
+            }
 
-        // Send notification via Line
-        const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${lineChannelToken}`
-            },
-            body: JSON.stringify({
-                to: lineGroupId,
-                messages: [{ type: 'text', text: message }]
-            })
-        });
+            // Check schedules
+            let matchedSchedule = null;
+            for (const schedule of profile.schedules) {
+                if (!schedule.enabled || !schedule.time) continue;
 
-        if (lineResponse.ok) {
-            // Update lastSent in Firestore via REST API
-            const updateUrl = `${firestoreUrl}?updateMask.fieldPaths=lastSent`;
-            const timeKey = matchedSchedule.time.replace(':', '_');
+                const [schedHour, schedMin] = schedule.time.split(':').map(Number);
+                const schedMinutes = schedHour * 60 + schedMin;
 
-            await fetch(updateUrl, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fields: {
-                        ...settingsData.fields,
-                        lastSent: {
-                            mapValue: {
-                                fields: {
-                                    ...lastSent,
-                                    [timeKey]: { stringValue: today }
-                                }
-                            }
-                        }
-                    }
-                })
-            });
+                if (Math.abs(currentMinutes - schedMinutes) <= 2) {
+                    matchedSchedule = schedule;
+                    break;
+                }
+            }
 
-            return res.status(200).json({
-                message: 'Notification sent!',
-                time: currentTime,
-                type: matchedSchedule.type
-            });
-        } else {
-            const error = await lineResponse.json();
-            return res.status(500).json({ error: 'Failed to send', details: error });
+            if (!matchedSchedule) {
+                results.push({
+                    profile: profile.name,
+                    status: 'no match',
+                    schedules: profile.schedules.map(s => s.time)
+                });
+                continue;
+            }
+
+            // Build message
+            const messageTemplate = matchedSchedule.type === 'reminder'
+                ? profile.templates.reminder
+                : profile.templates.summary;
+
+            const message = messageTemplate
+                .replace('{date}', thaiDate)
+                .replace('{present}', presentCount.toString())
+                .replace('{absent}', absentCount.toString())
+                .replace('{classes}', classesText)
+                .replace('{printStatus}', printStatus)
+                .replace('{total}', (presentCount + absentCount).toString());
+
+            // Send to Line
+            try {
+                const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${profile.lineChannelToken}`
+                    },
+                    body: JSON.stringify({
+                        to: profile.lineGroupId,
+                        messages: [{ type: 'text', text: message }]
+                    })
+                });
+
+                if (lineResponse.ok) {
+                    results.push({ profile: profile.name, status: 'sent', type: matchedSchedule.type });
+                } else {
+                    const error = await lineResponse.json();
+                    results.push({ profile: profile.name, status: 'failed', error });
+                }
+            } catch (e: any) {
+                results.push({ profile: profile.name, status: 'error', error: e.message });
+            }
         }
+
+        return res.status(200).json({
+            message: 'Cron completed',
+            time: currentTime,
+            profileCount: profiles.length,
+            results
+        });
 
     } catch (error: any) {
         console.error('Cron error:', error);
