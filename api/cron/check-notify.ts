@@ -116,9 +116,24 @@ export default async function handler(req: any, res: any) {
             const studentsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/students?pageSize=1000`;
             const studentsResponse = await fetch(studentsUrl);
 
-            // Get attendance
-            const attendanceUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/attendance/${today}`;
-            const attendanceResponse = await fetch(attendanceUrl);
+            // Get attendance - use runQuery to filter by date field (like Dashboard does)
+            const attendanceQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`;
+            const attendanceResponse = await fetch(attendanceQueryUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    structuredQuery: {
+                        from: [{ collectionId: 'attendance' }],
+                        where: {
+                            fieldFilter: {
+                                field: { fieldPath: 'date' },
+                                op: 'EQUAL',
+                                value: { stringValue: today }
+                            }
+                        }
+                    }
+                })
+            });
 
             // Get print log
             const printLogUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/print_logs/${today}`;
@@ -150,19 +165,25 @@ export default async function handler(req: any, res: any) {
 
                 if (attendanceResponse.ok) {
                     const attendanceData = await attendanceResponse.json();
-                    const records = attendanceData.fields?.records?.mapValue?.fields || {};
+                    // runQuery returns array of results, each with a 'document' property
+                    const attendanceRecords = attendanceData
+                        .filter((item: any) => item.document)
+                        .map((item: any) => item.document);
 
-                    Object.entries(records).forEach(([studentId, record]: [string, any]) => {
-                        const status = record?.mapValue?.fields?.status?.stringValue || '';
-                        const student = activeStudents.find(s => s.id === studentId);
+                    attendanceRecords.forEach((doc: any) => {
+                        const fields = doc.fields || {};
+                        const studentId = fields.studentId?.stringValue || '';
+                        const grade = fields.grade?.stringValue || '';
+                        const status = fields.status?.stringValue || '';
 
-                        if (student) {
-                            checkedClasses.add(student.grade);
-                            if (status === 'present' || status === 'late') {
-                                presentCount++;
-                            } else if (status === 'absent' || status === 'leave' || status === 'sick') {
-                                absentCount++;
-                            }
+                        if (grade) {
+                            checkedClasses.add(grade);
+                        }
+
+                        if (status === 'present' || status === 'late') {
+                            presentCount++;
+                        } else if (status === 'absent' || status === 'leave' || status === 'sick') {
+                            absentCount++;
                         }
                     });
                 }
