@@ -92,6 +92,29 @@ export default async function handler(req: any, res: any) {
             });
         }
 
+        // Check print status from print_logs
+        let printStatus = '⏳ ยังไม่พิมพ์รายงาน';
+        let printedBy = '';
+        try {
+            const printLogUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/print_logs/${today}`;
+            const printLogResponse = await fetch(printLogUrl);
+            if (printLogResponse.ok) {
+                const printLogData = await printLogResponse.json();
+                if (printLogData.fields) {
+                    printedBy = printLogData.fields.printedBy?.stringValue || 'ไม่ระบุ';
+                    const printTime = printLogData.fields.timestamp?.timestampValue;
+                    const timeStr = printTime ? new Date(printTime).toLocaleTimeString('th-TH', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Asia/Bangkok'
+                    }) : '';
+                    printStatus = `✅ พิมพ์รายงานแล้ว (${printedBy} เวลา ${timeStr})`;
+                }
+            }
+        } catch (e) {
+            // Keep default status
+        }
+
         // Build message
         const messageTemplate = matchedSchedule.type === 'reminder'
             ? templates.reminder
@@ -101,7 +124,9 @@ export default async function handler(req: any, res: any) {
             .replace('{date}', thaiDate)
             .replace('{present}', '0')
             .replace('{absent}', '0')
-            .replace('{classes}', 'กำลังตรวจสอบ...');
+            .replace('{classes}', 'กำลังตรวจสอบ...')
+            .replace('{printStatus}', printStatus)
+            .replace('{printedBy}', printedBy);
 
         // Send notification via Line
         const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
