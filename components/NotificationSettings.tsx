@@ -205,8 +205,8 @@ export const NotificationSettingsPanel: React.FC = () => {
                         key={tab.id}
                         onClick={() => setActiveSection(tab.id as any)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSection === tab.id
-                                ? 'bg-brand-600 text-white'
-                                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                            ? 'bg-brand-600 text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
                             }`}
                     >
                         <tab.icon className="w-4 h-4" />
@@ -371,7 +371,9 @@ export const NotificationSettingsPanel: React.FC = () => {
                             • {'{date}'} = วันที่<br />
                             • {'{classes}'} = รายชื่อห้องที่ยังไม่เช็คชื่อ<br />
                             • {'{present}'} = จำนวนคนมา<br />
-                            • {'{absent}'} = จำนวนคนขาด/ลา
+                            • {'{absent}'} = จำนวนคนขาด/ลา<br />
+                            • {'{total}'} = จำนวนที่บันทึกทั้งหมด<br />
+                            • {'{printStatus}'} = สถานะพิมพ์รายงาน
                         </div>
                     </div>
                 </div>

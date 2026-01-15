@@ -122,6 +122,82 @@ export default async function handler(req: any, res: any) {
             // Keep default status
         }
 
+        // Fetch attendance data for today
+        let presentCount = 0;
+        let absentCount = 0;
+        let uncheckedClasses: string[] = [];
+
+        try {
+            // Get all students
+            const studentsUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/students`;
+            const studentsResponse = await fetch(studentsUrl);
+
+            // Get today's attendance
+            const attendanceUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/attendance/${today}`;
+            const attendanceResponse = await fetch(attendanceUrl);
+
+            if (studentsResponse.ok) {
+                const studentsData = await studentsResponse.json();
+                const students = studentsData.documents || [];
+
+                // Get unique class names
+                const allClasses = new Set<string>();
+                const activeStudents: any[] = [];
+
+                students.forEach((doc: any) => {
+                    const fields = doc.fields || {};
+                    const isActive = fields.isActive?.booleanValue !== false;
+                    const className = fields.class?.stringValue || '';
+
+                    if (isActive && className) {
+                        allClasses.add(className);
+                        activeStudents.push({
+                            id: doc.name.split('/').pop(),
+                            class: className
+                        });
+                    }
+                });
+
+                // Check attendance records
+                const checkedClasses = new Set<string>();
+
+                if (attendanceResponse.ok) {
+                    const attendanceData = await attendanceResponse.json();
+                    const records = attendanceData.fields?.records?.mapValue?.fields || {};
+
+                    // Count present/absent and track checked classes
+                    Object.entries(records).forEach(([studentId, record]: [string, any]) => {
+                        const status = record?.mapValue?.fields?.status?.stringValue || '';
+                        const student = activeStudents.find(s => s.id === studentId);
+
+                        if (student) {
+                            checkedClasses.add(student.class);
+
+                            if (status === 'present' || status === 'late') {
+                                presentCount++;
+                            } else if (status === 'absent' || status === 'leave' || status === 'sick') {
+                                absentCount++;
+                            }
+                        }
+                    });
+                }
+
+                // Find unchecked classes
+                allClasses.forEach(className => {
+                    if (!checkedClasses.has(className)) {
+                        uncheckedClasses.push(className);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error fetching attendance:', e);
+        }
+
+        // Format unchecked classes list
+        const classesText = uncheckedClasses.length > 0
+            ? uncheckedClasses.join(', ')
+            : '✅ ทุกห้องบันทึกครบแล้ว';
+
         // Build message
         const messageTemplate = matchedSchedule.type === 'reminder'
             ? templates.reminder
@@ -129,11 +205,12 @@ export default async function handler(req: any, res: any) {
 
         const message = messageTemplate
             .replace('{date}', thaiDate)
-            .replace('{present}', '0')
-            .replace('{absent}', '0')
-            .replace('{classes}', 'กำลังตรวจสอบ...')
+            .replace('{present}', presentCount.toString())
+            .replace('{absent}', absentCount.toString())
+            .replace('{classes}', classesText)
             .replace('{printStatus}', printStatus)
-            .replace('{printedBy}', printedBy);
+            .replace('{printedBy}', printedBy)
+            .replace('{total}', (presentCount + absentCount).toString());
 
         // Send notification via Line
         const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
