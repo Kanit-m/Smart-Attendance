@@ -4,7 +4,7 @@ import {
   UserPlus, Users, Upload, Trash2, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer
+  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer, Bell
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -18,6 +18,7 @@ import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AdminBottomNav } from './AdminBottomNav';
+import { NotificationSettingsPanel } from './NotificationSettings';
 
 interface AdminPanelProps {
   onSwitchToTeacherView: () => void;
@@ -749,6 +750,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 6, label: 'เวลาบันทึก', icon: Clock },
     { id: 7, label: 'ปฏิทิน', icon: CalendarDays },
     { id: 8, label: 'มอนิเตอร์', icon: Printer },
+    { id: 9, label: 'แจ้งเตือน', icon: Bell },
   ];
 
   return (
@@ -1496,6 +1498,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
             </div>
           </div>
         )}
+
+        {/* Tab 9: Notification Settings */}
+        {activeTab === 9 && <NotificationSettingsPanel />}
       </div>
 
       {/* Mobile Bottom Navigation */}

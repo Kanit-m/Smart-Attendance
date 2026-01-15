@@ -4,5 +4,11 @@
             "source": "/(.*)",
             "destination": "/index.html"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/cron/check-notify",
+            "schedule": "*/5 5-10 * * 1-5"
+        }
     ]
 }
