@@ -24,7 +24,7 @@ export default async function handler(req: any, res: any) {
 
     try {
         // Use Firebase REST API to get settings
-        const projectId = process.env.FIREBASE_PROJECT_ID || 'kanit-smart-attendance';
+        const projectId = process.env.FIREBASE_PROJECT_ID || 'tester010-1a27e';
         const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/notifications`;
 
         const settingsResponse = await fetch(firestoreUrl);
