@@ -9,6 +9,7 @@ interface Profile {
     lineChannelToken: string;
     schedules: Array<{ time: string; enabled: boolean; type: string }>;
     templates: { reminder: string; summary: string };
+    selectedGrades: string[];
 }
 
 export default async function handler(req: any, res: any) {
@@ -69,7 +70,8 @@ export default async function handler(req: any, res: any) {
                     templates: {
                         reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
                         summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
-                    }
+                    },
+                    selectedGrades: (fields.selectedGrades?.arrayValue?.values || []).map((g: any) => g.stringValue || '')
                 };
             });
         }
@@ -97,7 +99,8 @@ export default async function handler(req: any, res: any) {
                     templates: {
                         reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
                         summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
-                    }
+                    },
+                    selectedGrades: []
                 }];
             }
         }
@@ -111,6 +114,7 @@ export default async function handler(req: any, res: any) {
         let absentCount = 0;
         let uncheckedClasses: string[] = [];
         let printStatus = '⏳ ยังไม่พิมพ์รายงาน';
+        let absentStudents: { name: string; grade: string }[] = [];
 
         try {
             // Get students (pageSize=1000 to get all students, default is only 20)
@@ -173,7 +177,7 @@ export default async function handler(req: any, res: any) {
 
                     attendanceRecords.forEach((doc: any) => {
                         const fields = doc.fields || {};
-                        const studentId = fields.studentId?.stringValue || '';
+                        const studentName = fields.studentName?.stringValue || '';
                         const grade = fields.grade?.stringValue || '';
                         const status = fields.status?.stringValue || '';
 
@@ -186,6 +190,8 @@ export default async function handler(req: any, res: any) {
                             presentCount++;
                         } else if (status === 'ขาด' || status === 'ลากิจ' || status === 'ลาป่วย') {
                             absentCount++;
+                            // Collect absent student info for {absentList}
+                            absentStudents.push({ name: studentName, grade });
                         }
                     });
                 }
@@ -273,13 +279,40 @@ export default async function handler(req: any, res: any) {
                 ? profile.templates.reminder
                 : profile.templates.summary;
 
+            // Generate absent list text based on profile's selectedGrades
+            let absentListText = '';
+            if (profile.selectedGrades && profile.selectedGrades.length > 0) {
+                // Group absent students by grade, filtered by selectedGrades
+                const filteredAbsent = absentStudents.filter(s =>
+                    profile.selectedGrades.includes(s.grade)
+                );
+
+                if (filteredAbsent.length > 0) {
+                    // Group by grade
+                    const byGrade: { [key: string]: string[] } = {};
+                    filteredAbsent.forEach(s => {
+                        if (!byGrade[s.grade]) byGrade[s.grade] = [];
+                        byGrade[s.grade].push(s.name);
+                    });
+
+                    // Build text
+                    const lines: string[] = ['❌ นักเรียนขาดเรียน:'];
+                    Object.entries(byGrade).forEach(([grade, names]) => {
+                        lines.push(`━━ ${grade} ━━`);
+                        names.forEach(name => lines.push(`• ${name}`));
+                    });
+                    absentListText = lines.join('\n');
+                }
+            }
+
             const message = messageTemplate
                 .replace('{date}', thaiDate)
                 .replace('{present}', presentCount.toString())
                 .replace('{absent}', absentCount.toString())
                 .replace('{classes}', classesText)
                 .replace('{printStatus}', printStatus)
-                .replace('{total}', (presentCount + absentCount).toString());
+                .replace('{total}', (presentCount + absentCount).toString())
+                .replace('{absentList}', absentListText);
 
             // Send to Line
             try {

@@ -23,7 +23,10 @@ interface NotificationProfile {
         reminder: string;
         summary: string;
     };
+    selectedGrades?: string[]; // ชั้นที่ต้องการรับแจ้งเตือนรายชื่อขาด
 }
+
+const ALL_GRADES = ['อนุบาล 2', 'อนุบาล 3', 'ประถมศึกษาปีที่ 1', 'ประถมศึกษาปีที่ 2', 'ประถมศึกษาปีที่ 3', 'ประถมศึกษาปีที่ 4', 'ประถมศึกษาปีที่ 5', 'ประถมศึกษาปีที่ 6'];
 
 const DEFAULT_PROFILE: Omit<NotificationProfile, 'id'> = {
     name: 'กลุ่มใหม่',
@@ -36,8 +39,9 @@ const DEFAULT_PROFILE: Omit<NotificationProfile, 'id'> = {
     ],
     templates: {
         reminder: '🔔 แจ้งเตือนการเช็คชื่อ\n━━━━━━━━━━\n📅 {date}\n❌ ยังไม่บันทึก:\n{classes}',
-        summary: '📊 สรุปประจำวัน\n━━━━━━━━━━\n📅 {date}\n✅ มา: {present} คน\n❌ ขาด/ลา: {absent} คน\n{printStatus}'
-    }
+        summary: '📊 สรุปประจำวัน\n━━━━━━━━━━\n📅 {date}\n✅ มา: {present} คน\n❌ ขาด/ลา: {absent} คน\n\n{absentList}\n{printStatus}'
+    },
+    selectedGrades: [] // ไม่เลือกชั้นไหนเลย = ไม่แจ้งรายชื่อ
 };
 
 const INPUT_STYLE = "border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all w-full text-sm text-black bg-white placeholder-gray-400 shadow-sm";
@@ -51,7 +55,7 @@ export const NotificationSettingsPanel: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [activeSection, setActiveSection] = useState<'connection' | 'schedules' | 'templates'>('connection');
+    const [activeSection, setActiveSection] = useState<'connection' | 'schedules' | 'templates' | 'grades'>('connection');
 
     const selectedProfile = profiles.find(p => p.id === selectedProfileId);
 
@@ -311,11 +315,12 @@ export const NotificationSettingsPanel: React.FC = () => {
                     </div>
 
                     {/* Section Tabs */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         {[
                             { id: 'connection', label: 'เชื่อมต่อ Line', icon: Settings },
                             { id: 'schedules', label: 'ตั้งเวลา', icon: Clock },
-                            { id: 'templates', label: 'ข้อความ', icon: MessageSquare }
+                            { id: 'templates', label: 'ข้อความ', icon: MessageSquare },
+                            { id: 'grades', label: 'รายชื่อขาด', icon: Users }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -495,8 +500,75 @@ export const NotificationSettingsPanel: React.FC = () => {
                                     • {'{present}'} = จำนวนคนมา<br />
                                     • {'{absent}'} = จำนวนคนขาด/ลา<br />
                                     • {'{total}'} = จำนวนที่บันทึกทั้งหมด<br />
+                                    • {'{absentList}'} = รายชื่อนักเรียนขาด (ตามชั้นที่เลือก)<br />
                                     • {'{printStatus}'} = สถานะพิมพ์รายงาน
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Grades Section - Select which grades to show absent list */}
+                    {activeSection === 'grades' && (
+                        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                            <h4 className="font-bold text-black flex items-center gap-2">
+                                <Users className="w-5 h-5 text-gray-400" />
+                                เลือกชั้นที่ต้องการรับแจ้งรายชื่อขาด
+                            </h4>
+                            <p className="text-sm text-gray-500">
+                                เลือกชั้นที่ต้องการให้แสดงรายชื่อนักเรียนที่ขาดในข้อความ (ใช้ตัวแปร {'{absentList}'})
+                            </p>
+
+                            {/* Select All / Deselect All */}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => updateProfile('selectedGrades', [...ALL_GRADES])}
+                                    className="text-sm text-brand-600 hover:text-brand-700 font-medium"
+                                >
+                                    เลือกทั้งหมด
+                                </button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                    onClick={() => updateProfile('selectedGrades', [])}
+                                    className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                                >
+                                    ยกเลิกทั้งหมด
+                                </button>
+                            </div>
+
+                            {/* Grade Checkboxes */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {ALL_GRADES.map(grade => {
+                                    const isSelected = selectedProfile.selectedGrades?.includes(grade) || false;
+                                    return (
+                                        <label
+                                            key={grade}
+                                            className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${isSelected
+                                                    ? 'bg-brand-50 border-brand-300 text-brand-700'
+                                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={(e) => {
+                                                    const current = selectedProfile.selectedGrades || [];
+                                                    if (e.target.checked) {
+                                                        updateProfile('selectedGrades', [...current, grade]);
+                                                    } else {
+                                                        updateProfile('selectedGrades', current.filter(g => g !== grade));
+                                                    }
+                                                }}
+                                                className="w-4 h-4 text-brand-600 rounded"
+                                            />
+                                            <span className="text-sm font-medium">{grade}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Info */}
+                            <div className="p-3 bg-amber-50 rounded-lg text-sm text-amber-700">
+                                <strong>หมายเหตุ:</strong> ถ้าไม่เลือกชั้นไหนเลย ตัวแปร {'{absentList}'} จะแสดงค่าว่าง
                             </div>
                         </div>
                     )}
