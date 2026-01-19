@@ -8,8 +8,14 @@ interface Schedule {
     id: string;
     time: string;
     enabled: boolean;
-    type: 'reminder' | 'summary';
+    templateId: string; // อ้างอิงไปที่ MessageTemplate.id
     label: string;
+}
+
+interface MessageTemplate {
+    id: string;
+    name: string;      // หัวข้อ เช่น "เตือนเช้า"
+    content: string;   // ข้อความ
 }
 
 interface NotificationProfile {
@@ -19,10 +25,7 @@ interface NotificationProfile {
     lineGroupId: string;
     lineChannelToken: string;
     schedules: Schedule[];
-    templates: {
-        reminder: string;
-        summary: string;
-    };
+    templates: MessageTemplate[]; // Custom templates array
     selectedGrades?: string[]; // ชั้นที่ต้องการรับแจ้งเตือนรายชื่อขาด
 }
 
@@ -34,13 +37,13 @@ const DEFAULT_PROFILE: Omit<NotificationProfile, 'id'> = {
     lineGroupId: '',
     lineChannelToken: '',
     schedules: [
-        { id: '1', time: '12:00', enabled: true, type: 'reminder', label: 'เตือนเช็คชื่อ' },
-        { id: '2', time: '15:30', enabled: true, type: 'summary', label: 'สรุปประจำวัน' }
+        { id: '1', time: '12:00', enabled: true, templateId: 'reminder', label: 'เตือนเช็คชื่อ' },
+        { id: '2', time: '15:30', enabled: true, templateId: 'summary', label: 'สรุปประจำวัน' }
     ],
-    templates: {
-        reminder: '🔔 แจ้งเตือนการเช็คชื่อ\n━━━━━━━━━━\n📅 {date}\n❌ ยังไม่บันทึก:\n{classes}',
-        summary: '📊 สรุปประจำวัน\n━━━━━━━━━━\n📅 {date}\n✅ มา: {present} คน\n❌ ขาด/ลา: {absent} คน\n\n{absentList}\n{printStatus}'
-    },
+    templates: [
+        { id: 'reminder', name: 'เตือนเช็คชื่อ', content: '🔔 แจ้งเตือนการเช็คชื่อ\n━━━━━━━━━━\n📅 {date}\n❌ ยังไม่บันทึก:\n{classes}' },
+        { id: 'summary', name: 'สรุปประจำวัน', content: '📊 สรุปประจำวัน\n━━━━━━━━━━\n📅 {date}\n✅ มา: {present} คน\n❌ ขาด/ลา: {absent} คน\n\n{absentList}\n{printStatus}' }
+    ],
     selectedGrades: [] // ไม่เลือกชั้นไหนเลย = ไม่แจ้งรายชื่อ
 };
 
@@ -199,16 +202,14 @@ export const NotificationSettingsPanel: React.FC = () => {
     };
 
     // Test send template (via cron)
-    const handleTemplateTest = async (type: 'reminder' | 'summary') => {
+    const handleTemplateTest = async (templateId: string) => {
         if (!selectedProfile?.id) return;
-
-        // Show warning if dirty? (Complex to track dirty state here, so just warn to save)
 
         setTesting(true);
         try {
             // Use today's date
             const today = new Date().toISOString().split('T')[0];
-            const response = await fetch(`/api/cron/check-notify?date=${today}&test=true&type=${type}`);
+            const response = await fetch(`/api/cron/check-notify?date=${today}&test=true&templateId=${templateId}&profileId=${selectedProfile.id}`);
             const data = await response.json();
 
             if (response.ok) {
@@ -230,7 +231,7 @@ export const NotificationSettingsPanel: React.FC = () => {
             id: Date.now().toString(),
             time: '08:00',
             enabled: true,
-            type: 'reminder',
+            templateId: selectedProfile.templates[0]?.id || 'reminder',
             label: 'แจ้งเตือนใหม่'
         };
         updateProfile('schedules', [...selectedProfile.schedules, newSchedule]);
@@ -449,12 +450,13 @@ export const NotificationSettingsPanel: React.FC = () => {
                                         />
 
                                         <select
-                                            value={schedule.type}
-                                            onChange={(e) => updateSchedule(schedule.id, 'type', e.target.value)}
+                                            value={schedule.templateId}
+                                            onChange={(e) => updateSchedule(schedule.id, 'templateId', e.target.value)}
                                             className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white flex-1"
                                         >
-                                            <option value="reminder">เตือนเช็คชื่อ</option>
-                                            <option value="summary">สรุปประจำวัน</option>
+                                            {selectedProfile.templates.map(t => (
+                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
                                         </select>
 
                                         <button
@@ -481,72 +483,87 @@ export const NotificationSettingsPanel: React.FC = () => {
                     {/* Templates Section */}
                     {activeSection === 'templates' && (
                         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                            <h4 className="font-bold text-black flex items-center gap-2">
-                                <MessageSquare className="w-5 h-5 text-gray-400" />
-                                ข้อความแจ้งเตือน
-                            </h4>
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-black flex items-center gap-2">
+                                    <MessageSquare className="w-5 h-5 text-gray-400" />
+                                    ข้อความแจ้งเตือน
+                                </h4>
+                                <button
+                                    onClick={() => {
+                                        const newTemplate: MessageTemplate = {
+                                            id: Date.now().toString(),
+                                            name: 'ข้อความใหม่',
+                                            content: '📢 ข้อความใหม่\\n━━━━━━━━━━\\n{date}'
+                                        };
+                                        updateProfile('templates', [...selectedProfile.templates, newTemplate]);
+                                    }}
+                                    className={BTN_SECONDARY}
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    เพิ่มข้อความ
+                                </button>
+                            </div>
 
                             <div className="space-y-4">
-                                <div>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            ข้อความเตือนเช็คชื่อ
-                                        </label>
-                                        <button
-                                            onClick={() => handleTemplateTest('reminder')}
-                                            disabled={testing}
-                                            className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 disabled:opacity-50"
-                                        >
-                                            <Send className="w-3 h-3" />
-                                            ทดสอบส่ง
-                                        </button>
+                                {selectedProfile.templates.map((template, index) => (
+                                    <div key={template.id} className="p-4 bg-gray-50 rounded-xl space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <input
+                                                type="text"
+                                                value={template.name}
+                                                onChange={(e) => {
+                                                    const updated = [...selectedProfile.templates];
+                                                    updated[index] = { ...template, name: e.target.value };
+                                                    updateProfile('templates', updated);
+                                                }}
+                                                className="font-medium text-black bg-transparent border-b border-gray-300 focus:border-brand-500 outline-none px-1 py-0.5"
+                                                placeholder="ชื่อข้อความ"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleTemplateTest(template.id as any)}
+                                                    disabled={testing}
+                                                    className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 disabled:opacity-50"
+                                                >
+                                                    <Send className="w-3 h-3" />
+                                                    ทดสอบ
+                                                </button>
+                                                {selectedProfile.templates.length > 1 && (
+                                                    <button
+                                                        onClick={() => {
+                                                            updateProfile('templates', selectedProfile.templates.filter(t => t.id !== template.id));
+                                                        }}
+                                                        className="text-gray-400 hover:text-rose-500"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <textarea
+                                            value={template.content}
+                                            onChange={(e) => {
+                                                const updated = [...selectedProfile.templates];
+                                                updated[index] = { ...template, content: e.target.value };
+                                                updateProfile('templates', updated);
+                                            }}
+                                            rows={4}
+                                            className={INPUT_STYLE}
+                                            placeholder="ข้อความแจ้งเตือน..."
+                                        />
                                     </div>
-                                    <textarea
-                                        value={selectedProfile.templates.reminder}
-                                        onChange={(e) => updateProfile('templates', {
-                                            ...selectedProfile.templates,
-                                            reminder: e.target.value
-                                        })}
-                                        rows={5}
-                                        className={INPUT_STYLE}
-                                    />
-                                </div>
+                                ))}
+                            </div>
 
-                                <div>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            ข้อความสรุปประจำวัน
-                                        </label>
-                                        <button
-                                            onClick={() => handleTemplateTest('summary')}
-                                            disabled={testing}
-                                            className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 disabled:opacity-50"
-                                        >
-                                            <Send className="w-3 h-3" />
-                                            ทดสอบส่ง
-                                        </button>
-                                    </div>
-                                    <textarea
-                                        value={selectedProfile.templates.summary}
-                                        onChange={(e) => updateProfile('templates', {
-                                            ...selectedProfile.templates,
-                                            summary: e.target.value
-                                        })}
-                                        rows={5}
-                                        className={INPUT_STYLE}
-                                    />
-                                </div>
-
-                                <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                                    <strong>ตัวแปรที่ใช้ได้:</strong><br />
-                                    • {'{date}'} = วันที่<br />
-                                    • {'{classes}'} = รายชื่อห้องที่ยังไม่เช็คชื่อ<br />
-                                    • {'{present}'} = จำนวนคนมา<br />
-                                    • {'{absent}'} = จำนวนคนขาด/ลา<br />
-                                    • {'{total}'} = จำนวนที่บันทึกทั้งหมด<br />
-                                    • {'{absentList}'} = รายชื่อนักเรียนขาด (ตามชั้นที่เลือก)<br />
-                                    • {'{printStatus}'} = สถานะพิมพ์รายงาน
-                                </div>
+                            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                                <strong>ตัวแปรที่ใช้ได้:</strong><br />
+                                • {'{date}'} = วันที่<br />
+                                • {'{classes}'} = รายชื่อห้องที่ยังไม่เช็คชื่อ<br />
+                                • {'{present}'} = จำนวนคนมา<br />
+                                • {'{absent}'} = จำนวนคนขาด/ลา<br />
+                                • {'{total}'} = จำนวนที่บันทึกทั้งหมด<br />
+                                • {'{absentList}'} = รายชื่อนักเรียนขาด (ตามชั้นที่เลือก)<br />
+                                • {'{printStatus}'} = สถานะพิมพ์รายงาน
                             </div>
                         </div>
                     )}

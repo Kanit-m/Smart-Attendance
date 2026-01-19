@@ -1,22 +1,29 @@
 // Vercel Cron Job - ตรวจสอบเวลาและส่งแจ้งเตือน
 // รองรับ Multi-Profile: ส่งไปหลายกลุ่ม Line ด้วยข้อความต่างกัน
 
+interface MessageTemplate {
+    id: string;
+    name: string;
+    content: string;
+}
+
 interface Profile {
     id: string;
     name: string;
     enabled: boolean;
     lineGroupId: string;
     lineChannelToken: string;
-    schedules: Array<{ time: string; enabled: boolean; type: string }>;
-    templates: { reminder: string; summary: string };
+    schedules: Array<{ time: string; enabled: boolean; templateId: string }>;
+    templates: MessageTemplate[];
     selectedGrades: string[];
 }
 
 export default async function handler(req: any, res: any) {
-    // Test mode: ?date=YYYY-MM-DD&test=true&type=summary (or type=reminder)
+    // Test mode: ?date=YYYY-MM-DD&test=true&templateId=xxx&profileId=xxx
     const testDate = req.query?.date as string | undefined;
     const isTestMode = req.query?.test === 'true';
-    const testType = (req.query?.type as string) || 'summary'; // default to summary in test mode
+    const testTemplateId = (req.query?.templateId as string) || '';
+    const testProfileId = (req.query?.profileId as string) || '';
 
     // Get current time in Thailand timezone
     const now = new Date();
@@ -65,12 +72,13 @@ export default async function handler(req: any, res: any) {
                     schedules: (fields.schedules?.arrayValue?.values || []).map((s: any) => ({
                         time: s.mapValue?.fields?.time?.stringValue || '',
                         enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
-                        type: s.mapValue?.fields?.type?.stringValue || 'reminder'
+                        templateId: s.mapValue?.fields?.templateId?.stringValue || s.mapValue?.fields?.type?.stringValue || 'reminder'
                     })),
-                    templates: {
-                        reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
-                        summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
-                    },
+                    templates: (fields.templates?.arrayValue?.values || []).map((t: any) => ({
+                        id: t.mapValue?.fields?.id?.stringValue || '',
+                        name: t.mapValue?.fields?.name?.stringValue || '',
+                        content: t.mapValue?.fields?.content?.stringValue || ''
+                    })),
                     selectedGrades: (fields.selectedGrades?.arrayValue?.values || []).map((g: any) => g.stringValue || '')
                 };
             });
@@ -94,12 +102,12 @@ export default async function handler(req: any, res: any) {
                     schedules: (fields.schedules?.arrayValue?.values || []).map((s: any) => ({
                         time: s.mapValue?.fields?.time?.stringValue || '',
                         enabled: s.mapValue?.fields?.enabled?.booleanValue || false,
-                        type: s.mapValue?.fields?.type?.stringValue || 'reminder'
+                        templateId: s.mapValue?.fields?.templateId?.stringValue || s.mapValue?.fields?.type?.stringValue || 'reminder'
                     })),
-                    templates: {
-                        reminder: fields.templates?.mapValue?.fields?.reminder?.stringValue || '',
-                        summary: fields.templates?.mapValue?.fields?.summary?.stringValue || ''
-                    },
+                    templates: [
+                        { id: 'reminder', name: 'เตือนเช็คชื่อ', content: fields.templates?.mapValue?.fields?.reminder?.stringValue || '' },
+                        { id: 'summary', name: 'สรุปประจำวัน', content: fields.templates?.mapValue?.fields?.summary?.stringValue || '' }
+                    ],
                     selectedGrades: []
                 }];
             }
@@ -272,12 +280,17 @@ export default async function handler(req: any, res: any) {
                 continue;
             }
 
-            // Check schedules (skip in test mode - use type parameter or default to summary)
-            let matchedSchedule: { time: string; enabled: boolean; type: string } | null = null;
+            // Check schedules (skip in test mode - use templateId parameter)
+            let matchedSchedule: { time: string; enabled: boolean; templateId: string } | null = null;
 
             if (isTestMode) {
-                // In test mode, use the specified type (reminder or summary)
-                matchedSchedule = { time: currentTime, enabled: true, type: testType };
+                // In test mode, use the specified templateId or first template
+                // If profileId specified, only process that profile
+                if (testProfileId && profile.id !== testProfileId) {
+                    continue;
+                }
+                const templateId = testTemplateId || profile.templates[0]?.id || 'reminder';
+                matchedSchedule = { time: currentTime, enabled: true, templateId };
             } else {
                 for (const schedule of profile.schedules) {
                     if (!schedule.enabled || !schedule.time) continue;
@@ -301,10 +314,9 @@ export default async function handler(req: any, res: any) {
                 continue;
             }
 
-            // Build message
-            const messageTemplate = matchedSchedule.type === 'reminder'
-                ? profile.templates.reminder
-                : profile.templates.summary;
+            // Build message - find template by ID
+            const template = profile.templates.find(t => t.id === matchedSchedule!.templateId);
+            const messageTemplate = template?.content || '';
 
             // Generate absent list text based on profile's selectedGrades
             let absentListText = '';
@@ -356,7 +368,7 @@ export default async function handler(req: any, res: any) {
                 });
 
                 if (lineResponse.ok) {
-                    results.push({ profile: profile.name, status: 'sent', type: matchedSchedule.type });
+                    results.push({ profile: profile.name, status: 'sent', templateId: matchedSchedule.templateId });
                 } else {
                     const error = await lineResponse.json();
                     results.push({ profile: profile.name, status: 'failed', error });
