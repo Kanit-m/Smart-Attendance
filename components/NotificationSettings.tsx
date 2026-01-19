@@ -192,8 +192,32 @@ export const NotificationSettingsPanel: React.FC = () => {
             } else {
                 showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
             }
-        } catch (error) {
             showToast('เกิดข้อผิดพลาด', 'error');
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    // Test send template (via cron)
+    const handleTemplateTest = async (type: 'reminder' | 'summary') => {
+        if (!selectedProfile?.id) return;
+
+        // Show warning if dirty? (Complex to track dirty state here, so just warn to save)
+
+        setTesting(true);
+        try {
+            // Use today's date
+            const today = new Date().toISOString().split('T')[0];
+            const response = await fetch(`/api/cron/check-notify?date=${today}&test=true&type=${type}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('ส่งข้อความทดสอบแล้ว (ใช้ค่าที่บันทึกล่าสุด)', 'success');
+            } else {
+                showToast('ส่งไม่สำเร็จ', 'error');
+            }
+        } catch (error) {
+            showToast('เกิดข้อผิดพลาดในการเรียก API', 'error');
         } finally {
             setTesting(false);
         }
@@ -464,9 +488,19 @@ export const NotificationSettingsPanel: React.FC = () => {
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        ข้อความเตือนเช็คชื่อ
-                                    </label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            ข้อความเตือนเช็คชื่อ
+                                        </label>
+                                        <button
+                                            onClick={() => handleTemplateTest('reminder')}
+                                            disabled={testing}
+                                            className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 disabled:opacity-50"
+                                        >
+                                            <Send className="w-3 h-3" />
+                                            ทดสอบส่ง
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={selectedProfile.templates.reminder}
                                         onChange={(e) => updateProfile('templates', {
@@ -479,9 +513,19 @@ export const NotificationSettingsPanel: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        ข้อความสรุปประจำวัน
-                                    </label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            ข้อความสรุปประจำวัน
+                                        </label>
+                                        <button
+                                            onClick={() => handleTemplateTest('summary')}
+                                            disabled={testing}
+                                            className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1 disabled:opacity-50"
+                                        >
+                                            <Send className="w-3 h-3" />
+                                            ทดสอบส่ง
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={selectedProfile.templates.summary}
                                         onChange={(e) => updateProfile('templates', {
@@ -543,8 +587,8 @@ export const NotificationSettingsPanel: React.FC = () => {
                                         <label
                                             key={grade}
                                             className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${isSelected
-                                                    ? 'bg-brand-50 border-brand-300 text-brand-700'
-                                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                                ? 'bg-brand-50 border-brand-300 text-brand-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                                                 }`}
                                         >
                                             <input
