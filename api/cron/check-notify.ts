@@ -122,7 +122,7 @@ export default async function handler(req: any, res: any) {
                     if (!schedule.enabled || !schedule.time) return false;
                     const [schedHour, schedMin] = schedule.time.split(':').map(Number);
                     const schedMinutes = schedHour * 60 + schedMin;
-                    return Math.abs(currentMinutes - schedMinutes) <= 2;
+                    return Math.abs(currentMinutes - schedMinutes) <= 0;
                 });
             });
 
@@ -285,7 +285,7 @@ export default async function handler(req: any, res: any) {
                     const [schedHour, schedMin] = schedule.time.split(':').map(Number);
                     const schedMinutes = schedHour * 60 + schedMin;
 
-                    if (Math.abs(currentMinutes - schedMinutes) <= 2) {
+                    if (Math.abs(currentMinutes - schedMinutes) <= 0) {
                         matchedSchedule = schedule;
                         break;
                     }
