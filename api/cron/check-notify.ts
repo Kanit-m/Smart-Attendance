@@ -254,14 +254,13 @@ export default async function handler(req: any, res: any) {
             if (printLogResponse.ok) {
                 const printLogData = await printLogResponse.json();
                 if (printLogData.fields) {
-                    const printedBy = printLogData.fields.printedBy?.stringValue || 'ไม่ระบุ';
                     const printTime = printLogData.fields.timestamp?.timestampValue;
                     const timeStr = printTime ? new Date(printTime).toLocaleTimeString('th-TH', {
                         hour: '2-digit',
                         minute: '2-digit',
                         timeZone: 'Asia/Bangkok'
                     }) : '';
-                    printStatus = `✅ พิมพ์รายงานแล้ว (${printedBy} เวลา ${timeStr})`;
+                    printStatus = `✅ พิมพ์รายงานแล้ว (เวลา ${timeStr})`;
                 }
             }
         } catch (e) {
