@@ -72,7 +72,27 @@ export const NotificationSettingsPanel: React.FC = () => {
                 if (!profilesSnap.empty) {
                     const loadedProfiles: NotificationProfile[] = [];
                     profilesSnap.forEach(doc => {
-                        loadedProfiles.push({ id: doc.id, ...doc.data() } as NotificationProfile);
+                        const data = doc.data();
+                        // Migrate templates from old object format to new array format
+                        let templates = data.templates;
+                        if (templates && !Array.isArray(templates)) {
+                            // Old format: { reminder: '...', summary: '...' }
+                            templates = [
+                                { id: 'reminder', name: 'เตือนเช็คชื่อ', content: templates.reminder || '' },
+                                { id: 'summary', name: 'สรุปประจำวัน', content: templates.summary || '' }
+                            ];
+                        }
+                        // Migrate schedules from old type to templateId
+                        const schedules = (data.schedules || []).map((s: any) => ({
+                            ...s,
+                            templateId: s.templateId || s.type || 'reminder'
+                        }));
+                        loadedProfiles.push({
+                            id: doc.id,
+                            ...data,
+                            templates: templates || DEFAULT_PROFILE.templates,
+                            schedules
+                        } as NotificationProfile);
                     });
                     setProfiles(loadedProfiles);
                     if (loadedProfiles.length > 0) {
