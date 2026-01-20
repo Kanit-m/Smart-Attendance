@@ -574,7 +574,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* Student List */}
-            <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24">
+            <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24 overflow-y-auto">
                 {loading ? (
                     <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-500" /></div>
                 ) : students.length === 0 ? (
@@ -968,7 +968,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     return (
-        <div className="rounded-3xl shadow-xl border border-white/20 flex min-h-[80vh] relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
+        <div className="rounded-3xl shadow-xl border border-white/20 flex min-h-[80vh] max-h-[100vh] relative pb-16 md:pb-0 overflow-hidden" style={{ backgroundColor: '#003060' }}>
 
             {/* Desktop Sidebar Only */}
             <div className={`hidden md:flex flex-col border-r border-white/20 transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`} style={{ backgroundColor: '#003060' }}>
@@ -976,7 +976,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* --- MAIN CONTENT AREA --- */}
-            <div className="flex-1 flex flex-col min-h-0 relative print:bg-white print:overflow-visible bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+            <div className="flex-1 flex flex-col min-h-0 relative print:bg-white print:overflow-visible bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-y-auto">
 
                 {/* HEADER */}
                 <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 z-20 no-print">
