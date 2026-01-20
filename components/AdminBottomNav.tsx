@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Users, Plus, UserPlus, GraduationCap, Pencil, LogOut, Clock, CalendarDays } from 'lucide-react';
+import { Home, Users, Plus, UserPlus, GraduationCap, Pencil, LogOut, Clock, CalendarDays, Printer, Bell } from 'lucide-react';
 
 interface AdminBottomNavProps {
     activeTab: number;
@@ -29,6 +29,8 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
         { id: 3, label: 'เพิ่มครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-emerald-500' },
         { id: 4, label: 'ลบ/แก้ไข', icon: <Pencil className="w-5 h-5" />, color: 'bg-amber-500' },
         { id: 6, label: 'เวลาบันทึก', icon: <Clock className="w-5 h-5" />, color: 'bg-purple-500' },
+        { id: 8, label: 'มอนิเตอร์', icon: <Printer className="w-5 h-5" />, color: 'bg-indigo-500' },
+        { id: 9, label: 'แจ้งเตือน', icon: <Bell className="w-5 h-5" />, color: 'bg-orange-500' },
         { id: -1, label: 'มุมมองครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-teal-500' },
     ];
 
@@ -42,7 +44,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
     };
 
     // Check if current tab is one of the speed dial tabs
-    const isSpeedDialTabActive = [2, 3, 4, 6, 7].includes(activeTab);
+    const isSpeedDialTabActive = [2, 3, 4, 6, 7, 8, 9].includes(activeTab);
 
     // Use portal to render at body level (fixes fixed positioning inside overflow containers)
     return createPortal(
@@ -55,27 +57,29 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
                 />
             )}
 
-            {/* Speed Dial Items - Circular Icons */}
-            <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-[101] md:hidden flex items-center gap-4 transition-all duration-300 ${isSpeedDialOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                {speedDialItems.map((item, index) => (
-                    <div
-                        key={item.id}
-                        className="flex flex-col items-center gap-1"
-                        style={{
-                            transform: isSpeedDialOpen ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.5)',
-                            opacity: isSpeedDialOpen ? 1 : 0,
-                            transition: `all 0.3s ease-out ${isSpeedDialOpen ? index * 60 : 0}ms`,
-                        }}
-                    >
-                        <button
-                            onClick={() => handleSpeedDialItemClick(item.id)}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg text-white transition-all duration-200 ${item.color} hover:scale-110 active:scale-95`}
+            {/* Speed Dial Items - Grid Layout (2 rows) */}
+            <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-[101] md:hidden transition-all duration-300 ${isSpeedDialOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+                <div className="grid grid-cols-4 gap-3 p-3 bg-white/95 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200">
+                    {speedDialItems.map((item, index) => (
+                        <div
+                            key={item.id}
+                            className="flex flex-col items-center gap-1"
+                            style={{
+                                transform: isSpeedDialOpen ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.5)',
+                                opacity: isSpeedDialOpen ? 1 : 0,
+                                transition: `all 0.3s ease-out ${isSpeedDialOpen ? index * 40 : 0}ms`,
+                            }}
                         >
-                            {item.icon}
-                        </button>
-                        <span className="text-[10px] font-medium text-white bg-black/60 px-2 py-0.5 rounded-full whitespace-nowrap">{item.label}</span>
-                    </div>
-                ))}
+                            <button
+                                onClick={() => handleSpeedDialItemClick(item.id)}
+                                className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md text-white transition-all duration-200 ${item.color} hover:scale-110 active:scale-95`}
+                            >
+                                {item.icon}
+                            </button>
+                            <span className="text-[10px] font-bold text-gray-700 whitespace-nowrap text-center">{item.label}</span>
+                        </div>
+                    ))}
+                </div>
             </div>
 
             {/* Bottom Navigation Bar - Fixed at bottom with highest z-index */}
