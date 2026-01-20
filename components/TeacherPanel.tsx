@@ -480,7 +480,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     );
 
     const RenderCheckList = () => (
-        <div className="flex-1 flex flex-col overflow-hidden h-full relative">
+        <div className="flex-1 flex flex-col h-full relative">
             {/* Bulk Actions Toolbar */}
             <div className="bg-white border-b border-gray-200 p-3 flex flex-col gap-2 shrink-0">
                 <div className="flex items-center justify-between gap-2">
@@ -574,7 +574,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* Student List */}
-            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24">
+            <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24">
                 {loading ? (
                     <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-500" /></div>
                 ) : students.length === 0 ? (
@@ -665,7 +665,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     );
 
     const RenderDashboard = () => (
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 space-y-6">
+        <div className="flex-1 p-4 md:p-8 pb-24 space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
@@ -760,7 +760,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     );
 
     const RenderRoomHistory = () => (
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 space-y-6">
+        <div className="flex-1 p-4 md:p-8 pb-24 space-y-6">
             {/* Controls */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
                 <div>
@@ -968,7 +968,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     return (
-        <div className="rounded-3xl shadow-xl border border-white/20 flex h-[calc(100vh-100px)] md:h-[calc(100vh-180px)] overflow-hidden relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
+        <div className="rounded-3xl shadow-xl border border-white/20 flex min-h-[80vh] relative pb-16 md:pb-0" style={{ backgroundColor: '#003060' }}>
 
             {/* Desktop Sidebar Only */}
             <div className={`hidden md:flex flex-col border-r border-white/20 transition-all duration-300 no-print ${isSidebarOpen ? 'w-64' : 'w-20'}`} style={{ backgroundColor: '#003060' }}>

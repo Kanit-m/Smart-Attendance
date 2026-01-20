@@ -85,11 +85,14 @@
       /* Prevent pull-to-refresh on mobile */
       overscroll-behavior: none;
       overscroll-behavior-y: contain;
+      margin: 0;
+      padding: 0;
     }
 
-    /* Prevent accidental refresh on iOS */
+    /* Allow body scroll */
     html,
     body {
+      height: 100%;
       overflow: auto;
       -webkit-overflow-scrolling: touch;
     }
@@ -151,25 +154,25 @@
       background: transparent;
     }
 
-    /* Desktop/Mouse: Hide thumb by default, show on hover */
+    /* Desktop/Mouse: Always show scrollbar thumb */
     @media (hover: hover) {
       .hover-scrollbar::-webkit-scrollbar-thumb {
-        background-color: transparent;
+        background-color: #9CA3AF;
         border-radius: 10px;
       }
 
       .hover-scrollbar:hover::-webkit-scrollbar-thumb {
-        background-color: #9CA3AF;
+        background-color: #6B7280;
       }
 
       /* Firefox */
       .hover-scrollbar {
         scrollbar-width: thin;
-        scrollbar-color: transparent transparent;
+        scrollbar-color: #9CA3AF transparent;
       }
 
       .hover-scrollbar:hover {
-        scrollbar-color: #9CA3AF transparent;
+        scrollbar-color: #6B7280 transparent;
       }
     }
 
@@ -331,6 +334,7 @@
         transform: scale(0.8);
         opacity: 0;
       }
+
       100% {
         transform: scale(1);
         opacity: 1;

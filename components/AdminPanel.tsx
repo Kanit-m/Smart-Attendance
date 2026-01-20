@@ -122,6 +122,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [loadingPrintLog, setLoadingPrintLog] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
+  // Recording logs feature - date range view
+  const [logStartDate, setLogStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toLocaleDateString('sv-SE');
+  });
+  const [logEndDate, setLogEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [recordingLogs, setRecordingLogs] = useState<{
+    date: string;
+    grades: { grade: string; recorded: boolean }[]
+  }[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logCurrentPage, setLogCurrentPage] = useState(1);
+  const LOGS_PER_PAGE = 5;
+
+  // LINE notification for unrecorded classes
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [selectedProfileForNotify, setSelectedProfileForNotify] = useState<string>('');
+  const [notificationProfiles, setNotificationProfiles] = useState<{ id: string; name: string; lineGroupId: string; lineChannelToken: string }[]>([]);
+  const [sendingNotification, setSendingNotification] = useState(false);
+
+  // Print logs date range view (Monitor tab)
+  const [printLogStartDate, setPrintLogStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toLocaleDateString('sv-SE');
+  });
+  const [printLogEndDate, setPrintLogEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [printLogs, setPrintLogs] = useState<{
+    date: string;
+    printed: boolean;
+    timestamp?: number;
+    printedBy?: string;
+    role?: string;
+  }[]>([]);
+  const [loadingPrintLogs, setLoadingPrintLogs] = useState(false);
+  const [printLogCurrentPage, setPrintLogCurrentPage] = useState(1);
+  const PRINT_LOGS_PER_PAGE = 5;
+  const [showPrintNotifyModal, setShowPrintNotifyModal] = useState(false);
+
   // Track if data has been loaded to prevent redundant fetches
   const [dataLoaded, setDataLoaded] = useState({
     students: false,
@@ -358,6 +398,282 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       setPrintLog({ printed: false, timestamp: null, printedBy: null, role: null });
     } finally {
       setLoadingPrintLog(false);
+    }
+  };
+
+  // Fetch recording logs for date range (Optimized: single Firestore query)
+  const fetchRecordingLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      // 1. Query attendance for entire range with >= and <= (1 query)
+      const q = query(
+        collection(db, 'attendance'),
+        where('date', '>=', logStartDate),
+        where('date', '<=', logEndDate),
+        orderBy('date', 'desc')
+      );
+      const snapshot = await getDocs(q);
+
+      // 2. Create Set of date+grade that have been recorded
+      const recordedSet = new Set<string>();
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        recordedSet.add(`${data.date}_${data.grade}`);
+      });
+
+      // 3. Get holiday dates from calendarEvents (already loaded, no extra query)
+      const holidayDates = new Set(
+        calendarEvents
+          .filter(e => e.type === 'holiday')
+          .map(e => e.date)
+      );
+
+      // 4. Generate list of working days (exclude Sat, Sun, holidays)
+      const results: typeof recordingLogs = [];
+      const start = new Date(logStartDate);
+      const end = new Date(logEndDate);
+
+      for (let d = new Date(end); d >= start; d.setDate(d.getDate() - 1)) {
+        const dateStr = d.toLocaleDateString('sv-SE');
+        const dayOfWeek = d.getDay();
+
+        // Skip Saturday (6) and Sunday (0)
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+        // Skip holidays
+        if (holidayDates.has(dateStr)) continue;
+
+        // Check each grade
+        const grades = GRADE_OPTIONS.map(grade => ({
+          grade,
+          recorded: recordedSet.has(`${dateStr}_${grade}`)
+        }));
+
+        results.push({ date: dateStr, grades });
+      }
+
+      setRecordingLogs(results);
+      setLogCurrentPage(1);
+    } catch (e) {
+      console.error(e);
+      showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  // Fetch notification profiles for LINE notification modal
+  const fetchNotificationProfiles = async () => {
+    try {
+      const profilesSnap = await getDocs(collection(db, 'settings', 'notifications', 'profiles'));
+      const profiles: typeof notificationProfiles = [];
+      profilesSnap.forEach(d => {
+        const data = d.data();
+        if (data.enabled && data.lineGroupId && data.lineChannelToken) {
+          profiles.push({
+            id: d.id,
+            name: data.name || 'ไม่มีชื่อ',
+            lineGroupId: data.lineGroupId,
+            lineChannelToken: data.lineChannelToken
+          });
+        }
+      });
+      setNotificationProfiles(profiles);
+      if (profiles.length > 0 && !selectedProfileForNotify) {
+        setSelectedProfileForNotify(profiles[0].id);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Get unrecorded classes for notification
+  const getUnrecordedSummary = () => {
+    const summary: { date: string; classes: string[] }[] = [];
+    recordingLogs.forEach(log => {
+      const unrecorded = log.grades.filter(g => !g.recorded).map(g => g.grade);
+      if (unrecorded.length > 0) {
+        summary.push({ date: log.date, classes: unrecorded });
+      }
+    });
+    return summary;
+  };
+
+  // Send LINE notification for unrecorded classes
+  const sendUnrecordedNotification = async () => {
+    const profile = notificationProfiles.find(p => p.id === selectedProfileForNotify);
+    if (!profile) {
+      showToast('กรุณาเลือกกลุ่มที่ต้องการแจ้งเตือน', 'error');
+      return;
+    }
+
+    const unrecordedSummary = getUnrecordedSummary();
+    if (unrecordedSummary.length === 0) {
+      showToast('ทุกห้องบันทึกครบแล้ว ไม่มีข้อมูลให้ส่ง', 'error');
+      return;
+    }
+
+    setSendingNotification(true);
+    try {
+      // Build message
+      const lines = ['⚠️ แจ้งเตือน: ห้องที่ยังไม่บันทึกการเช็คชื่อ', '━━━━━━━━━━'];
+      unrecordedSummary.forEach(item => {
+        const dateObj = new Date(item.date);
+        const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+        lines.push(`📅 ${thaiDate}: ${item.classes.join(', ')}`);
+      });
+      lines.push('━━━━━━━━━━', 'กรุณาตรวจสอบและบันทึกให้ครบ');
+
+      const message = lines.join('\n');
+
+      // Send via LINE API
+      const response = await fetch('/api/line/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: profile.lineChannelToken,
+          groupId: profile.lineGroupId,
+          message: message
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showToast('ส่งแจ้งเตือนสำเร็จ!', 'success');
+        setShowNotifyModal(false);
+      } else {
+        showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('เกิดข้อผิดพลาดในการส่ง', 'error');
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
+  // Fetch print logs for date range (Optimized: single Firestore query)
+  const fetchPrintLogsRange = async () => {
+    setLoadingPrintLogs(true);
+    try {
+      // 1. Query print_logs for entire range with >= and <= (1 query)
+      const q = query(
+        collection(db, 'print_logs'),
+        where('date', '>=', printLogStartDate),
+        where('date', '<=', printLogEndDate),
+        orderBy('date', 'desc')
+      );
+      const snapshot = await getDocs(q);
+
+      // 2. Create map of printed dates
+      const printedMap = new Map<string, { timestamp?: number; printedBy?: string; role?: string }>();
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        printedMap.set(data.date, {
+          timestamp: data.timestamp,
+          printedBy: data.printedBy,
+          role: data.role
+        });
+      });
+
+      // 3. Get holiday dates from calendarEvents (already loaded, no extra query)
+      const holidayDates = new Set(
+        calendarEvents
+          .filter(e => e.type === 'holiday')
+          .map(e => e.date)
+      );
+
+      // 4. Generate list of working days (exclude Sat, Sun, holidays)
+      const results: typeof printLogs = [];
+      const start = new Date(printLogStartDate);
+      const end = new Date(printLogEndDate);
+
+      for (let d = new Date(end); d >= start; d.setDate(d.getDate() - 1)) {
+        const dateStr = d.toLocaleDateString('sv-SE');
+        const dayOfWeek = d.getDay();
+
+        // Skip Saturday (6) and Sunday (0)
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+        // Skip holidays
+        if (holidayDates.has(dateStr)) continue;
+
+        // Check if printed
+        const printData = printedMap.get(dateStr);
+        results.push({
+          date: dateStr,
+          printed: !!printData,
+          timestamp: printData?.timestamp,
+          printedBy: printData?.printedBy,
+          role: printData?.role
+        });
+      }
+
+      setPrintLogs(results);
+      setPrintLogCurrentPage(1);
+    } catch (e) {
+      console.error(e);
+      showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
+    } finally {
+      setLoadingPrintLogs(false);
+    }
+  };
+
+  // Get unprinted dates for notification
+  const getUnprintedSummary = () => {
+    return printLogs.filter(log => !log.printed).map(log => log.date);
+  };
+
+  // Send LINE notification for unprinted reports
+  const sendUnprintedNotification = async () => {
+    const profile = notificationProfiles.find(p => p.id === selectedProfileForNotify);
+    if (!profile) {
+      showToast('กรุณาเลือกกลุ่มที่ต้องการแจ้งเตือน', 'error');
+      return;
+    }
+
+    const unprintedDates = getUnprintedSummary();
+    if (unprintedDates.length === 0) {
+      showToast('ทุกวันพิมพ์รายงานครบแล้ว ไม่มีข้อมูลให้ส่ง', 'error');
+      return;
+    }
+
+    setSendingNotification(true);
+    try {
+      // Build message
+      const lines = ['⚠️ แจ้งเตือน: รายงานประจำวันที่ยังไม่ได้พิมพ์', '━━━━━━━━━━'];
+      unprintedDates.forEach(dateStr => {
+        const dateObj = new Date(dateStr);
+        const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+        lines.push(`📅 ${thaiDate}`);
+      });
+      lines.push('━━━━━━━━━━', 'กรุณาดำเนินการพิมพ์รายงาน');
+
+      const message = lines.join('\n');
+
+      // Send via LINE API
+      const response = await fetch('/api/line/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: profile.lineChannelToken,
+          groupId: profile.lineGroupId,
+          message: message
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showToast('ส่งแจ้งเตือนสำเร็จ!', 'success');
+        setShowPrintNotifyModal(false);
+      } else {
+        showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('เกิดข้อผิดพลาดในการส่ง', 'error');
+    } finally {
+      setSendingNotification(false);
     }
   };
 
@@ -754,7 +1070,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   ];
 
   return (
-    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row overflow-hidden min-h-[80vh] pb-20 md:pb-0" style={{ background: '#F2F8FC' }}>
+    <div className="rounded-3xl shadow-lg border border-white/50 flex flex-col md:flex-row min-h-[80vh] pb-20 md:pb-0" style={{ background: '#F2F8FC' }}>
 
       {/* Sidebar - Hidden on mobile */}
       <div className="hidden md:flex w-64 bg-white/60 border-r border-white/30 flex-col shrink-0">
@@ -786,8 +1102,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-white/30">
+      {/* Content Area - No overflow, let body scroll */}
+      <div className="flex-1 p-4 md:p-8 bg-white/30">
         {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} /></div>}
 
         {activeTab === 1 && (
@@ -1248,8 +1564,215 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 </div>
               )}
             </div>
+
+            {/* Recording Logs - Date Range View */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="font-bold mb-4 text-black flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-teal-600" /> ประวัติการบันทึกตามช่วงวัน
+              </h3>
+
+              {/* Date Range Picker */}
+              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-teal-50 p-4 rounded-xl border border-teal-100">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-teal-700 mb-1 block">วันเริ่มต้น</label>
+                  <input
+                    type="date"
+                    className={`${INPUT_STYLE} border-teal-200 focus:ring-teal-300`}
+                    value={logStartDate}
+                    onChange={e => setLogStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-teal-700 mb-1 block">วันสิ้นสุด</label>
+                  <input
+                    type="date"
+                    className={`${INPUT_STYLE} border-teal-200 focus:ring-teal-300`}
+                    value={logEndDate}
+                    onChange={e => setLogEndDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      fetchRecordingLogs();
+                      if (!dataLoaded.calendar) fetchCalendarEvents();
+                    }}
+                    disabled={loadingLogs}
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center h-[42px]"
+                  >
+                    {loadingLogs ? <Loader2 className="w-5 h-5 animate-spin" /> : 'แสดงข้อมูล'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Results Table */}
+              {recordingLogs.length > 0 && (
+                <>
+                  <div className="overflow-x-auto border border-gray-200 rounded-xl mb-4">
+                    <table className="w-full text-sm text-left text-black">
+                      <thead className="text-xs text-gray-600 uppercase bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-3 py-3 sticky left-0 bg-gray-50">วันที่</th>
+                          {GRADE_OPTIONS.map(g => (
+                            <th key={g} className="px-2 py-3 text-center whitespace-nowrap">
+                              {g.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {recordingLogs
+                          .slice((logCurrentPage - 1) * LOGS_PER_PAGE, logCurrentPage * LOGS_PER_PAGE)
+                          .map(log => {
+                            const dateObj = new Date(log.date);
+                            const thaiDate = dateObj.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                            return (
+                              <tr key={log.date} className="hover:bg-teal-50/50 transition-colors">
+                                <td className="px-3 py-2 font-medium text-gray-700 sticky left-0 bg-white whitespace-nowrap">
+                                  {thaiDate}
+                                </td>
+                                {log.grades.map(g => (
+                                  <td key={g.grade} className="px-2 py-2 text-center">
+                                    {g.recorded ? (
+                                      <span className="text-emerald-500"><CheckCircle className="w-4 h-4 inline" /></span>
+                                    ) : (
+                                      <span className="text-red-400"><XCircle className="w-4 h-4 inline" /></span>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-500">
+                      แสดง {Math.min((logCurrentPage - 1) * LOGS_PER_PAGE + 1, recordingLogs.length)} - {Math.min(logCurrentPage * LOGS_PER_PAGE, recordingLogs.length)} จาก {recordingLogs.length} วัน
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={logCurrentPage === 1}
+                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        ← ก่อนหน้า
+                      </button>
+                      <span className="px-3 py-1 text-sm font-medium">
+                        {logCurrentPage} / {Math.ceil(recordingLogs.length / LOGS_PER_PAGE)}
+                      </span>
+                      <button
+                        onClick={() => setLogCurrentPage(p => Math.min(Math.ceil(recordingLogs.length / LOGS_PER_PAGE), p + 1))}
+                        disabled={logCurrentPage >= Math.ceil(recordingLogs.length / LOGS_PER_PAGE)}
+                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        ถัดไป →
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Send Notification Button */}
+                  <button
+                    onClick={() => {
+                      fetchNotificationProfiles();
+                      setShowNotifyModal(true);
+                    }}
+                    className="w-full mt-4 bg-orange-500 text-white px-4 py-3 rounded-xl hover:bg-orange-600 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
+                  >
+                    <Bell className="w-5 h-5" />
+                    ส่งแจ้งเตือนห้องที่ยังไม่บันทึก
+                  </button>
+                </>
+              )}
+
+              {recordingLogs.length === 0 && !loadingLogs && (
+                <div className="text-center text-gray-400 py-8">
+                  เลือกช่วงวันที่แล้วกดปุ่ม "แสดงข้อมูล" เพื่อดูประวัติการบันทึก
+                </div>
+              )}
+
+              {loadingLogs && (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Notification Modal */}
+        {showNotifyModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+              <h3 className="font-bold text-xl text-black flex items-center gap-2">
+                <Bell className="w-6 h-6 text-orange-500" />
+                ส่งแจ้งเตือนห้องที่ยังไม่บันทึก
+              </h3>
+
+              {/* Profile Selector */}
+              <div>
+                <label className="text-sm font-bold text-gray-700 block mb-2">เลือกกลุ่ม LINE</label>
+                {notificationProfiles.length > 0 ? (
+                  <select
+                    className={INPUT_STYLE}
+                    value={selectedProfileForNotify}
+                    onChange={e => setSelectedProfileForNotify(e.target.value)}
+                  >
+                    {notificationProfiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">
+                    ไม่พบกลุ่มที่ตั้งค่าไว้ กรุณาตั้งค่าในแท็บ "แจ้งเตือน" ก่อน
+                  </div>
+                )}
+              </div>
+
+              {/* Preview */}
+              <div>
+                <label className="text-sm font-bold text-gray-700 block mb-2">ห้องที่ยังไม่บันทึก</label>
+                <div className="bg-gray-50 rounded-xl p-4 max-h-48 overflow-y-auto text-sm space-y-1">
+                  {(() => {
+                    const summary = getUnrecordedSummary();
+                    if (summary.length === 0) {
+                      return <div className="text-emerald-600 font-medium">✅ ทุกห้องบันทึกครบแล้ว!</div>;
+                    }
+                    return summary.map(item => {
+                      const dateObj = new Date(item.date);
+                      const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+                      return (
+                        <div key={item.date} className="flex gap-2">
+                          <span className="text-gray-500">📅 {thaiDate}:</span>
+                          <span className="text-red-600 font-medium">{item.classes.join(', ')}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowNotifyModal(false)}
+                  className={`${BTN_SECONDARY} flex-1 py-2.5`}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={sendUnrecordedNotification}
+                  disabled={sendingNotification || notificationProfiles.length === 0 || getUnrecordedSummary().length === 0}
+                  className={`${BTN_PRIMARY} flex-1 py-2.5 bg-orange-500 hover:bg-orange-600`}
+                >
+                  {sendingNotification ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ส่งแจ้งเตือน'}
+                </button>
+              </div>
+            </div>
+          </div>
+          , document.body)}
         {activeTab === 7 && (
           <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
             <div className={`bg-white p-6 rounded-2xl border shadow-md transition-all ${editingEventId ? 'border-brand-300 ring-2 ring-brand-100' : 'border-gray-200'}`}>
@@ -1496,8 +2019,230 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 </button>
               )}
             </div>
+
+            {/* Print Logs - Date Range View */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="font-bold mb-4 text-black flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-indigo-600" /> ประวัติการพิมพ์ตามช่วงวัน
+              </h3>
+
+              {/* Date Range Picker */}
+              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-indigo-700 mb-1 block">วันเริ่มต้น</label>
+                  <input
+                    type="date"
+                    className={`${INPUT_STYLE} border-indigo-200 focus:ring-indigo-300`}
+                    value={printLogStartDate}
+                    onChange={e => setPrintLogStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-indigo-700 mb-1 block">วันสิ้นสุด</label>
+                  <input
+                    type="date"
+                    className={`${INPUT_STYLE} border-indigo-200 focus:ring-indigo-300`}
+                    value={printLogEndDate}
+                    onChange={e => setPrintLogEndDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      fetchPrintLogsRange();
+                      if (!dataLoaded.calendar) fetchCalendarEvents();
+                    }}
+                    disabled={loadingPrintLogs}
+                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center h-[42px]"
+                  >
+                    {loadingPrintLogs ? <Loader2 className="w-5 h-5 animate-spin" /> : 'แสดงข้อมูล'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Results Table */}
+              {printLogs.length > 0 && (
+                <>
+                  <div className="overflow-x-auto border border-gray-200 rounded-xl mb-4">
+                    <table className="w-full text-sm text-left text-black">
+                      <thead className="text-xs text-gray-600 uppercase bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3">วันที่</th>
+                          <th className="px-4 py-3 text-center">สถานะ</th>
+                          <th className="px-4 py-3">รายละเอียด</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {printLogs
+                          .slice((printLogCurrentPage - 1) * PRINT_LOGS_PER_PAGE, printLogCurrentPage * PRINT_LOGS_PER_PAGE)
+                          .map(log => {
+                            const dateObj = new Date(log.date);
+                            const thaiDate = dateObj.toLocaleDateString('th-TH', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit' });
+                            return (
+                              <tr key={log.date} className="hover:bg-indigo-50/50 transition-colors">
+                                <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap">
+                                  {thaiDate}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {log.printed ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                                      <CheckCircle className="w-3 h-3" /> พิมพ์แล้ว
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                                      <Clock className="w-3 h-3" /> ยังไม่พิมพ์
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-gray-600">
+                                  {log.printed && log.timestamp ? (
+                                    <span>
+                                      {log.printedBy && <span className="font-medium">{log.printedBy}</span>}
+                                      {log.role && (
+                                        <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">
+                                          {log.role === 'admin' ? 'ผู้ดูแล' : log.role === 'teacher' ? 'ครู' : log.role}
+                                        </span>
+                                      )}
+                                      <span className="ml-2 text-gray-400">
+                                        {new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-500">
+                      แสดง {Math.min((printLogCurrentPage - 1) * PRINT_LOGS_PER_PAGE + 1, printLogs.length)} - {Math.min(printLogCurrentPage * PRINT_LOGS_PER_PAGE, printLogs.length)} จาก {printLogs.length} วัน
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPrintLogCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={printLogCurrentPage === 1}
+                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        ← ก่อนหน้า
+                      </button>
+                      <span className="px-3 py-1 text-sm font-medium">
+                        {printLogCurrentPage} / {Math.ceil(printLogs.length / PRINT_LOGS_PER_PAGE)}
+                      </span>
+                      <button
+                        onClick={() => setPrintLogCurrentPage(p => Math.min(Math.ceil(printLogs.length / PRINT_LOGS_PER_PAGE), p + 1))}
+                        disabled={printLogCurrentPage >= Math.ceil(printLogs.length / PRINT_LOGS_PER_PAGE)}
+                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        ถัดไป →
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Send Notification Button */}
+                  <button
+                    onClick={() => {
+                      fetchNotificationProfiles();
+                      setShowPrintNotifyModal(true);
+                    }}
+                    className="w-full mt-4 bg-orange-500 text-white px-4 py-3 rounded-xl hover:bg-orange-600 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
+                  >
+                    <Bell className="w-5 h-5" />
+                    ส่งแจ้งเตือนวันที่ยังไม่พิมพ์
+                  </button>
+                </>
+              )}
+
+              {printLogs.length === 0 && !loadingPrintLogs && (
+                <div className="text-center text-gray-400 py-8">
+                  เลือกช่วงวันที่แล้วกดปุ่ม "แสดงข้อมูล" เพื่อดูประวัติการพิมพ์
+                </div>
+              )}
+
+              {loadingPrintLogs && (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Print Notification Modal */}
+        {showPrintNotifyModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+              <h3 className="font-bold text-xl text-black flex items-center gap-2">
+                <Bell className="w-6 h-6 text-orange-500" />
+                ส่งแจ้งเตือนวันที่ยังไม่พิมพ์รายงาน
+              </h3>
+
+              {/* Profile Selector */}
+              <div>
+                <label className="text-sm font-bold text-gray-700 block mb-2">เลือกกลุ่ม LINE</label>
+                {notificationProfiles.length > 0 ? (
+                  <select
+                    className={INPUT_STYLE}
+                    value={selectedProfileForNotify}
+                    onChange={e => setSelectedProfileForNotify(e.target.value)}
+                  >
+                    {notificationProfiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">
+                    ไม่พบกลุ่มที่ตั้งค่าไว้ กรุณาตั้งค่าในแท็บ "แจ้งเตือน" ก่อน
+                  </div>
+                )}
+              </div>
+
+              {/* Preview */}
+              <div>
+                <label className="text-sm font-bold text-gray-700 block mb-2">วันที่ยังไม่พิมพ์</label>
+                <div className="bg-gray-50 rounded-xl p-4 max-h-48 overflow-y-auto text-sm space-y-1">
+                  {(() => {
+                    const unprintedDates = getUnprintedSummary();
+                    if (unprintedDates.length === 0) {
+                      return <div className="text-emerald-600 font-medium">✅ ทุกวันพิมพ์รายงานครบแล้ว!</div>;
+                    }
+                    return unprintedDates.map(dateStr => {
+                      const dateObj = new Date(dateStr);
+                      const thaiDate = dateObj.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' });
+                      return (
+                        <div key={dateStr} className="text-amber-600 font-medium">
+                          📅 {thaiDate}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowPrintNotifyModal(false)}
+                  className={`${BTN_SECONDARY} flex-1 py-2.5`}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={sendUnprintedNotification}
+                  disabled={sendingNotification || notificationProfiles.length === 0 || getUnprintedSummary().length === 0}
+                  className={`${BTN_PRIMARY} flex-1 py-2.5 bg-orange-500 hover:bg-orange-600`}
+                >
+                  {sendingNotification ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ส่งแจ้งเตือน'}
+                </button>
+              </div>
+            </div>
+          </div>
+          , document.body)}
 
         {/* Tab 9: Notification Settings */}
         {activeTab === 9 && <NotificationSettingsPanel />}
