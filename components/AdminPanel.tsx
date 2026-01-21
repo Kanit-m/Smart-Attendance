@@ -1954,6 +1954,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   <h4 className={`text-2xl font-bold mb-2 ${printLog.printed ? 'text-emerald-800' : 'text-amber-800'}`}>
                     {printLog.printed ? '✅ พิมพ์รายงานแล้ว' : '⏳ ยังไม่ได้พิมพ์รายงาน'}
                   </h4>
+                  {/* Approve Button - Only show when NOT printed */}
+                  {!printLog.printed && (
+                    <button
+                      onClick={() => {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'อนุมัติการพิมพ์',
+                          message: `ยืนยันอนุมัติว่าพิมพ์รายงานวันที่ ${new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} แล้ว?`,
+                          isDangerous: false,
+                          action: async () => {
+                            setLoadingAction(true);
+                            try {
+                              const currentUserName = localStorage.getItem('currentUserName') || 'Admin';
+                              await setDoc(doc(db, 'print_logs', monitorDate), {
+                                date: monitorDate,
+                                timestamp: Date.now(),
+                                printedBy: currentUserName,
+                                role: 'อนุมัติ'
+                              });
+                              setPrintLog({
+                                printed: true,
+                                timestamp: Date.now(),
+                                printedBy: currentUserName,
+                                role: 'อนุมัติ'
+                              });
+                              showToast('อนุมัติเรียบร้อย', 'success');
+                              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                            } catch (e) {
+                              console.error(e);
+                              showToast('เกิดข้อผิดพลาด', 'error');
+                            } finally {
+                              setLoadingAction(false);
+                            }
+                          }
+                        });
+                      }}
+                      className={`${BTN_SUCCESS} mt-4`}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      อนุมัติพิมพ์
+                    </button>
+                  )}
                   {printLog.printed && printLog.timestamp && (
                     <div className="text-emerald-600">
                       <p className="font-medium">
