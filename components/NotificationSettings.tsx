@@ -215,7 +215,8 @@ export const NotificationSettingsPanel: React.FC = () => {
             } else {
                 showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
             }
-            showToast('เกิดข้อผิดพลาด', 'error');
+        } catch (error) {
+            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
         } finally {
             setTesting(false);
         }
