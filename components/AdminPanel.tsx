@@ -4,7 +4,7 @@ import {
   UserPlus, Users, Upload, Trash2, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer, Bell
+  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer, Bell, ClipboardList
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -13,7 +13,7 @@ import {
 import * as firebaseApp from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, firebaseConfig } from '../firebase';
-import { Student, TeacherForm, Gender, Role, AppUser, StudentStatus, SchoolActivity } from '../types';
+import { Student, TeacherForm, Gender, Role, AppUser, StudentStatus, SchoolActivity, DutySchedule } from '../types';
 import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -162,11 +162,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const PRINT_LOGS_PER_PAGE = 5;
   const [showPrintNotifyModal, setShowPrintNotifyModal] = useState(false);
 
+  // Duty schedule state
+  const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const DAY_LABELS: Record<string, string> = {
+    monday: 'วันจันทร์',
+    tuesday: 'วันอังคาร',
+    wednesday: 'วันพุธ',
+    thursday: 'วันพฤหัสบดี',
+    friday: 'วันศุกร์'
+  };
+  const [dutySchedule, setDutySchedule] = useState<Record<string, string[]>>({
+    monday: ['', ''],
+    tuesday: ['', ''],
+    wednesday: ['', ''],
+    thursday: ['', ''],
+    friday: ['', '']
+  });
+  const [loadingDuty, setLoadingDuty] = useState(false);
+  const [savingDuty, setSavingDuty] = useState(false);
+
   // Track if data has been loaded to prevent redundant fetches
   const [dataLoaded, setDataLoaded] = useState({
     students: false,
     teachers: false,
-    calendar: false
+    calendar: false,
+    duty: false
   });
 
   // Only fetch data when tab is accessed AND data hasn't been loaded yet
@@ -174,7 +194,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if ((activeTab === 0 || activeTab === 1 || activeTab === 4) && !dataLoaded.students) {
       fetchStudents();
     }
-    if (activeTab === 3 && !dataLoaded.teachers) {
+    if ((activeTab === 3 || activeTab === 10) && !dataLoaded.teachers) {
       fetchTeachers();
     }
     // if (activeTab === 0 || activeTab === 6) { // Tab 5 no longer needs holiday fetch for UI, but dashboard might need it
@@ -188,6 +208,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     }
     if (activeTab === 8) {
       fetchPrintLog(monitorDate);
+      if (!dataLoaded.duty) fetchDutySchedule();
+      if (!dataLoaded.calendar) fetchCalendarEvents();
+    }
+    if (activeTab === 10 && !dataLoaded.duty) {
+      fetchDutySchedule();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
@@ -254,7 +279,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     } catch (error) { console.error(error); } finally { setLoadingData(false); }
   };
 
+  // Fetch duty schedule from Firestore
+  const fetchDutySchedule = async () => {
+    setLoadingDuty(true);
+    try {
+      const snapshot = await getDocs(collection(db, 'duty_schedules'));
+      const schedule: Record<string, string[]> = {
+        monday: ['', ''],
+        tuesday: ['', ''],
+        wednesday: ['', ''],
+        thursday: ['', ''],
+        friday: ['', '']
+      };
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (DAY_NAMES.includes(d.id) && Array.isArray(data.teachers)) {
+          schedule[d.id] = data.teachers;
+        }
+      });
+      setDutySchedule(schedule);
+      setDataLoaded(prev => ({ ...prev, duty: true }));
+    } catch (e) {
+      console.error(e);
+      showToast('โหลดตารางเวรไม่สำเร็จ', 'error');
+    } finally {
+      setLoadingDuty(false);
+    }
+  };
 
+  // Save duty schedule to Firestore
+  const saveDutySchedule = async () => {
+    setSavingDuty(true);
+    try {
+      const batch = writeBatch(db);
+      DAY_NAMES.forEach(day => {
+        const docRef = doc(db, 'duty_schedules', day);
+        batch.set(docRef, { teachers: dutySchedule[day] || ['', ''] });
+      });
+      await batch.commit();
+      showToast('บันทึกตารางเวรเรียบร้อย', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('บันทึกตารางเวรไม่สำเร็จ', 'error');
+    } finally {
+      setSavingDuty(false);
+    }
+  };
+
+  // Get duty teachers for a specific date
+  const getDutyTeachersForDate = (dateStr: string): string[] => {
+    const date = new Date(dateStr + 'T00:00:00');
+    const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ...
+    const dayMap: Record<number, string> = {
+      1: 'monday',
+      2: 'tuesday',
+      3: 'wednesday',
+      4: 'thursday',
+      5: 'friday'
+    };
+    const dayName = dayMap[dayOfWeek];
+    if (dayName && dutySchedule[dayName]) {
+      return dutySchedule[dayName].filter(t => t.trim() !== '');
+    }
+    return [];
+  };
 
   const fetchAttendanceRecordTimes = async () => {
     setLoadingRecordTimes(true);
@@ -1067,6 +1155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 7, label: 'ปฏิทิน', icon: CalendarDays },
     { id: 8, label: 'มอนิเตอร์', icon: Printer },
     { id: 9, label: 'แจ้งเตือน', icon: Bell },
+    { id: 10, label: 'ตารางเวร', icon: ClipboardList },
   ];
 
   return (
@@ -1942,82 +2031,149 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 <div className="flex items-center justify-center py-10">
                   <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
                 </div>
-              ) : (
-                <div className={`rounded-2xl p-8 text-center ${printLog.printed ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-amber-50 border-2 border-amber-200'}`}>
-                  <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-4 ${printLog.printed ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                    {printLog.printed ? (
-                      <CheckCircle className="w-10 h-10 text-emerald-600" />
-                    ) : (
-                      <Clock className="w-10 h-10 text-amber-600" />
-                    )}
-                  </div>
-                  <h4 className={`text-2xl font-bold mb-2 ${printLog.printed ? 'text-emerald-800' : 'text-amber-800'}`}>
-                    {printLog.printed ? '✅ พิมพ์รายงานแล้ว' : '⏳ ยังไม่ได้พิมพ์รายงาน'}
-                  </h4>
-                  {/* Approve Button - Only show when NOT printed */}
-                  {!printLog.printed && (
-                    <button
-                      onClick={() => {
-                        setConfirmModal({
-                          isOpen: true,
-                          title: 'อนุมัติการพิมพ์',
-                          message: `ยืนยันอนุมัติว่าพิมพ์รายงานวันที่ ${new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} แล้ว?`,
-                          isDangerous: false,
-                          action: async () => {
-                            setLoadingAction(true);
-                            try {
-                              const currentUserName = localStorage.getItem('currentUserName') || 'Admin';
-                              await setDoc(doc(db, 'print_logs', monitorDate), {
-                                date: monitorDate,
-                                timestamp: Date.now(),
-                                printedBy: currentUserName,
-                                role: 'อนุมัติ'
-                              });
-                              setPrintLog({
-                                printed: true,
-                                timestamp: Date.now(),
-                                printedBy: currentUserName,
-                                role: 'อนุมัติ'
-                              });
-                              showToast('อนุมัติเรียบร้อย', 'success');
-                              setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                            } catch (e) {
-                              console.error(e);
-                              showToast('เกิดข้อผิดพลาด', 'error');
-                            } finally {
-                              setLoadingAction(false);
-                            }
-                          }
-                        });
-                      }}
-                      className={`${BTN_SUCCESS} mt-4`}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      อนุมัติพิมพ์
-                    </button>
-                  )}
-                  {printLog.printed && printLog.timestamp && (
-                    <div className="text-emerald-600">
-                      <p className="font-medium">
-                        เวลา {new Date(printLog.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+              ) : (() => {
+                // Check if selected date is a holiday
+                const isHoliday = calendarEvents.some(e => e.type === 'holiday' && e.date === monitorDate);
+                const holidayEvent = calendarEvents.find(e => e.type === 'holiday' && e.date === monitorDate);
+
+                // Check if selected date is weekend
+                const selectedDate = new Date(monitorDate + 'T00:00:00');
+                const dayOfWeek = selectedDate.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                if (isHoliday || isWeekend) {
+                  return (
+                    <div className="rounded-2xl p-8 text-center bg-orange-50 border-2 border-orange-200">
+                      <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-4 bg-orange-100">
+                        <Sun className="w-10 h-10 text-orange-600" />
+                      </div>
+                      <h4 className="text-2xl font-bold mb-2 text-orange-800">
+                        {isWeekend ? '🎉 วันหยุดสุดสัปดาห์' : `🎊 ${holidayEvent?.title || 'วันหยุด'}`}
+                      </h4>
+                      <p className="text-sm text-orange-600">ไม่ต้องพิมพ์รายงาน</p>
+                      <p className="text-sm text-gray-500 mt-3">
+                        วันที่ {new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>
-                      {printLog.printedBy && (
-                        <p className="text-sm mt-1">
-                          โดย: <span className="font-bold">{printLog.printedBy}</span>
-                          {printLog.role && (
-                            <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-emerald-200 text-emerald-700">
-                              {printLog.role === 'admin' ? 'ผู้ดูแล' : printLog.role === 'teacher' ? 'ครู' : printLog.role}
-                            </span>
-                          )}
-                        </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className={`rounded-2xl p-8 text-center ${printLog.printed ? 'bg-emerald-50 border-2 border-emerald-200' : 'bg-amber-50 border-2 border-amber-200'}`}>
+                    <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-4 ${printLog.printed ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                      {printLog.printed ? (
+                        <CheckCircle className="w-10 h-10 text-emerald-600" />
+                      ) : (
+                        <Clock className="w-10 h-10 text-amber-600" />
                       )}
                     </div>
-                  )}
-                  <p className="text-sm text-gray-500 mt-3">
-                    วันที่ {new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-              )}
+                    <h4 className={`text-2xl font-bold mb-2 ${printLog.printed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                      {printLog.printed ? '✅ พิมพ์รายงานแล้ว' : '⏳ ยังไม่ได้พิมพ์รายงาน'}
+                    </h4>
+                    {/* Approve Button - Only show when NOT printed */}
+                    {!printLog.printed && (
+                      <button
+                        onClick={() => {
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'อนุมัติการพิมพ์',
+                            message: `ยืนยันอนุมัติว่าพิมพ์รายงานวันที่ ${new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} แล้ว?`,
+                            isDangerous: false,
+                            action: async () => {
+                              setLoadingAction(true);
+                              try {
+                                const currentUserName = localStorage.getItem('currentUserName') || 'Admin';
+                                await setDoc(doc(db, 'print_logs', monitorDate), {
+                                  date: monitorDate,
+                                  timestamp: Date.now(),
+                                  printedBy: currentUserName,
+                                  role: 'อนุมัติ'
+                                });
+                                setPrintLog({
+                                  printed: true,
+                                  timestamp: Date.now(),
+                                  printedBy: currentUserName,
+                                  role: 'อนุมัติ'
+                                });
+                                showToast('อนุมัติเรียบร้อย', 'success');
+                                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                              } catch (e) {
+                                console.error(e);
+                                showToast('เกิดข้อผิดพลาด', 'error');
+                              } finally {
+                                setLoadingAction(false);
+                              }
+                            }
+                          });
+                        }}
+                        className={`${BTN_SUCCESS} mt-4`}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        อนุมัติพิมพ์
+                      </button>
+                    )}
+                    {printLog.printed && printLog.timestamp && (() => {
+                      const dutyTeachers = getDutyTeachersForDate(monitorDate);
+                      // Compare dates in local timezone properly
+                      const printDateTime = new Date(printLog.timestamp);
+                      const printYear = printDateTime.getFullYear();
+                      const printMonth = String(printDateTime.getMonth() + 1).padStart(2, '0');
+                      const printDay = String(printDateTime.getDate()).padStart(2, '0');
+                      const printDateStr = `${printYear}-${printMonth}-${printDay}`;
+                      const isLatePrint = printDateStr !== monitorDate;
+                      const printerIsOnDuty = dutyTeachers.includes(printLog.printedBy || '');
+
+                      return (
+                        <div className="text-emerald-600 space-y-2">
+                          <p className="font-medium">
+                            เวลา {new Date(printLog.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                          </p>
+                          {printLog.printedBy && (
+                            <p className="text-sm">
+                              โดย: <span className="font-bold">{printLog.printedBy}</span>
+                              {printLog.role && (
+                                <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-emerald-200 text-emerald-700">
+                                  {printLog.role === 'admin' ? 'ผู้ดูแล' : printLog.role === 'teacher' ? 'ครู' : printLog.role}
+                                </span>
+                              )}
+                              {!printerIsOnDuty && dutyTeachers.length > 0 && (
+                                <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-600">
+                                  พิมพ์แทน
+                                </span>
+                              )}
+                            </p>
+                          )}
+                          {/* Late print warning */}
+                          {isLatePrint && (
+                            <p className="text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg inline-block">
+                              ⚠️ พิมพ์ล่าช้า ({new Date(printLog.timestamp).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })})
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Duty Teachers Display */}
+                    {(() => {
+                      const dutyTeachers = getDutyTeachersForDate(monitorDate);
+                      if (dutyTeachers.length > 0) {
+                        return (
+                          <div className="mt-4 pt-3 border-t border-gray-200">
+                            <p className="text-sm text-gray-500">
+                              📌 เวรประจำวัน: <span className="font-bold text-purple-600">{dutyTeachers.join(', ')}</span>
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    <p className="text-sm text-gray-500 mt-3">
+                      วันที่ {new Date(monitorDate + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Refresh Button */}
               <button
@@ -2288,6 +2444,89 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
         {/* Tab 9: Notification Settings */}
         {activeTab === 9 && <NotificationSettingsPanel />}
+
+        {/* Tab 10: Duty Schedule */}
+        {activeTab === 10 && (
+          <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+              <h3 className="text-lg font-bold mb-5 flex items-center gap-2 text-black border-b border-gray-100 pb-3">
+                <ClipboardList className="w-5 h-5 text-purple-600" /> ตารางเวรพิมพ์รายงาน
+              </h3>
+
+              {loadingDuty ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {DAY_NAMES.map((day) => (
+                    <div key={day} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="font-bold text-gray-800 w-28">{DAY_LABELS[day]}</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 mb-1 block">ครูเวรคนที่ 1</label>
+                          <select
+                            className={INPUT_STYLE}
+                            value={dutySchedule[day]?.[0] || ''}
+                            onChange={(e) => {
+                              const newSchedule = { ...dutySchedule };
+                              if (!newSchedule[day]) newSchedule[day] = ['', ''];
+                              newSchedule[day] = [e.target.value, newSchedule[day][1] || ''];
+                              setDutySchedule(newSchedule);
+                            }}
+                          >
+                            <option value="">-- เลือกครู --</option>
+                            {teachers.map(t => (
+                              <option key={t.id} value={t.name}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 mb-1 block">ครูเวรคนที่ 2</label>
+                          <select
+                            className={INPUT_STYLE}
+                            value={dutySchedule[day]?.[1] || ''}
+                            onChange={(e) => {
+                              const newSchedule = { ...dutySchedule };
+                              if (!newSchedule[day]) newSchedule[day] = ['', ''];
+                              newSchedule[day] = [newSchedule[day][0] || '', e.target.value];
+                              setDutySchedule(newSchedule);
+                            }}
+                          >
+                            <option value="">-- เลือกครู --</option>
+                            {teachers.map(t => (
+                              <option key={t.id} value={t.name}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={saveDutySchedule}
+                    disabled={savingDuty}
+                    className={`${BTN_PRIMARY} w-full py-3 mt-4 bg-purple-600 hover:bg-purple-700`}
+                  >
+                    {savingDuty ? <Loader2 className="w-5 h-5 animate-spin" /> : 'บันทึกตารางเวร'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-sm text-purple-700">
+              <p className="font-bold mb-2">💡 วิธีใช้ตารางเวร</p>
+              <ul className="list-disc list-inside space-y-1 text-purple-600">
+                <li>เลือกครูที่รับผิดชอบพิมพ์รายงานแต่ละวัน (2 คนต่อวัน)</li>
+                <li>ระบบจะแสดงชื่อครูเวรในหน้า "มอนิเตอร์"</li>
+                <li>หากคนอื่นพิมพ์แทน ระบบจะแสดงให้เห็นว่าใครพิมพ์และใครเป็นเวร</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}

@@ -83,3 +83,8 @@ export interface SchoolActivity {
   description: string;
   createdAt: number;
 }
+
+export interface DutySchedule {
+  id: string;          // 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'
+  teachers: string[];  // ชื่อครูเวร 2 คน
+}

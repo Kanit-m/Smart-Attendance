@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Users, Plus, UserPlus, GraduationCap, Pencil, LogOut, Clock, CalendarDays, Printer, Bell } from 'lucide-react';
+import { Home, Users, Plus, UserPlus, GraduationCap, Pencil, LogOut, Clock, CalendarDays, Printer, Bell, ClipboardList } from 'lucide-react';
 
 interface AdminBottomNavProps {
     activeTab: number;
@@ -31,6 +31,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
         { id: 6, label: 'เวลาบันทึก', icon: <Clock className="w-5 h-5" />, color: 'bg-purple-500' },
         { id: 8, label: 'มอนิเตอร์', icon: <Printer className="w-5 h-5" />, color: 'bg-indigo-500' },
         { id: 9, label: 'แจ้งเตือน', icon: <Bell className="w-5 h-5" />, color: 'bg-orange-500' },
+        { id: 10, label: 'ตารางเวร', icon: <ClipboardList className="w-5 h-5" />, color: 'bg-pink-500' },
         { id: -1, label: 'มุมมองครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-teal-500' },
     ];
 
@@ -44,7 +45,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
     };
 
     // Check if current tab is one of the speed dial tabs
-    const isSpeedDialTabActive = [2, 3, 4, 6, 7, 8, 9].includes(activeTab);
+    const isSpeedDialTabActive = [2, 3, 4, 6, 7, 8, 9, 10].includes(activeTab);
 
     // Use portal to render at body level (fixes fixed positioning inside overflow containers)
     return createPortal(
