@@ -1193,7 +1193,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
       {/* Content Area - No overflow, let body scroll */}
       <div className="flex-1 p-4 md:p-8 bg-white/30">
-        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} /></div>}
+        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} isAdmin={true} /></div>}
 
         {activeTab === 1 && (
           <div className="space-y-4 animate-fade-in">

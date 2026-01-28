@@ -16,6 +16,7 @@ interface DashboardProps {
     embedded?: boolean;
     students?: Student[];
     holidays?: Holiday[];  // Pass from parent to avoid refetch on remount
+    isAdmin?: boolean;  // Show admin-only features like recording status
 }
 
 interface GradeStats {
@@ -33,7 +34,7 @@ interface GradeStats {
     isSubmitted: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays, isAdmin = false }) => {
     // Initialize with Today's date
     const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const dateInputRef = useRef<HTMLInputElement>(null);
@@ -695,6 +696,74 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                             <div className="h-1.5 bg-orange-400" />
                         </div>
                     ) : null
+                )}
+
+                {/* RECORDING STATUS SUMMARY - Show which classes have/haven't recorded (Admin only) */}
+                {isAdmin && isSchoolDay && totalClasses > 0 && (
+                    <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
+                        ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'
+                        : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+                        }`}>
+                        <div className="px-5 py-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2.5 rounded-full ${isAllSubmitted ? 'bg-emerald-200' : 'bg-amber-200'}`}>
+                                        {isAllSubmitted ? (
+                                            <ClipboardCheck className="w-5 h-5 text-emerald-600" />
+                                        ) : (
+                                            <Clock className="w-5 h-5 text-amber-600" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h3 className={`font-bold text-base ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                            {isAllSubmitted ? '✓ บันทึกครบทุกห้องแล้ว' : '⏳ รอการบันทึก'}
+                                        </h3>
+                                        <p className={`text-sm ${isAllSubmitted ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {submittedClasses} / {totalClasses} ห้อง
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className={`text-2xl font-bold px-3 py-1 rounded-xl ${isAllSubmitted
+                                    ? 'bg-emerald-200/50 text-emerald-700'
+                                    : 'bg-amber-200/50 text-amber-700'
+                                    }`}>
+                                    {Math.round((submittedClasses / totalClasses) * 100)}%
+                                </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="h-2.5 bg-white/60 rounded-full overflow-hidden mb-3">
+                                <div
+                                    className={`h-full transition-all duration-700 rounded-full ${isAllSubmitted
+                                        ? 'bg-gradient-to-r from-emerald-400 to-green-500'
+                                        : 'bg-gradient-to-r from-amber-400 to-orange-500'
+                                        }`}
+                                    style={{ width: `${(submittedClasses / totalClasses) * 100}%` }}
+                                />
+                            </div>
+
+                            {/* List of missing classes */}
+                            {missingClasses.length > 0 && (
+                                <div className="bg-white/50 rounded-xl p-3 border border-amber-100">
+                                    <p className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        ห้องที่ยังไม่บันทึก ({missingClasses.length} ห้อง)
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {missingClasses.map(cls => (
+                                            <span
+                                                key={cls.grade}
+                                                className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg border border-amber-200"
+                                            >
+                                                {cls.grade.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className={`h-1.5 ${isAllSubmitted ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    </div>
                 )}
 
                 {/* UPCOMING EVENT ALERT - Tomorrow or Next Few Days */}
