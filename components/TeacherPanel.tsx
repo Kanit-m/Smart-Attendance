@@ -5,7 +5,7 @@ import {
     UserCheck, UserX, Clock, Thermometer, Calendar,
     CheckSquare, Square, Contact,
     ClipboardList, ChevronLeft, ChevronRight, PieChart,
-    Building2, RotateCcw, History, Activity
+    Building2, RotateCcw, History, Activity, AlertTriangle, ClipboardCheck
 } from 'lucide-react';
 import {
     collection, getDocs, query, where, writeBatch, doc
@@ -75,6 +75,14 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
     // Multi-Selection State
     const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+
+    // Attendance Reminder Modal State (for past missing days only)
+    const [showAttendanceReminder, setShowAttendanceReminder] = useState(false);
+    const [hasCheckedReminder, setHasCheckedReminder] = useState(false);
+    const [pastMissingDates, setPastMissingDates] = useState<string[]>([]); // Excludes today
+
+    // Missing Days Badge State (includes today)
+    const [missingDates, setMissingDates] = useState<string[]>([]);
 
     // Track if holidays have been loaded
     const [holidaysLoaded, setHolidaysLoaded] = useState(false);
@@ -202,6 +210,125 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         }
     }, [loadAttendanceData, currentView]);
 
+    // Calculate missing days by querying Firestore for recorded dates (with cache)
+    useEffect(() => {
+        if (!currentUser.assignedClass) return;
+        if (!holidaysLoaded) return;
+
+        const MISSING_DAYS_CACHE_KEY = `missing_days_${currentUser.assignedClass}`;
+        const MISSING_DAYS_TIME_KEY = `missing_days_time_${currentUser.assignedClass}`;
+        const MISSING_DAYS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+
+        const calculateMissingDays = async () => {
+            const now = Date.now();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+            // Check cache first
+            const cachedTime = sessionStorage.getItem(MISSING_DAYS_TIME_KEY);
+            const cachedData = sessionStorage.getItem(MISSING_DAYS_CACHE_KEY);
+
+            if (cachedTime && cachedData) {
+                const cacheAge = now - parseInt(cachedTime);
+                if (cacheAge < MISSING_DAYS_CACHE_DURATION) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        // Check if cache is for today (same date)
+                        if (parsed.date === todayStr) {
+                            const cachedMissing = parsed.missing || [];
+                            setMissingDates(cachedMissing);
+
+                            // Also calculate past missing dates and show reminder
+                            const pastMissing = cachedMissing.filter((d: string) => d !== todayStr);
+                            setPastMissingDates(pastMissing);
+
+                            if (!hasCheckedReminder && pastMissing.length > 0) {
+                                setShowAttendanceReminder(true);
+                            }
+                            setHasCheckedReminder(true);
+                            return; // Use cache, skip Firestore query
+                        }
+                    } catch {
+                        // Cache parse error, continue to query
+                    }
+                }
+            }
+
+            // Start from day 1 of current month
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const firstDateStr = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-01`;
+
+            try {
+                // Query Firestore for all attendance records this month for this class
+                const q = query(
+                    collection(db, 'attendance'),
+                    where('grade', '==', currentUser.assignedClass),
+                    where('date', '>=', firstDateStr),
+                    where('date', '<=', todayStr)
+                );
+                const snap = await getDocs(q);
+
+                // Get unique dates that have been recorded
+                const recordedDates = new Set<string>();
+                snap.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.date) {
+                        recordedDates.add(data.date);
+                    }
+                });
+
+                // Build list of missing school days
+                const missing: string[] = [];
+                const checkDate = new Date(firstDayOfMonth);
+
+                while (checkDate <= today) {
+                    const dayOfWeek = checkDate.getDay();
+                    // Skip weekends (Saturday = 6, Sunday = 0)
+                    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                        const year = checkDate.getFullYear();
+                        const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(checkDate.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`;
+
+                        // Skip holidays
+                        if (!holidays.find(h => h.date === dateStr)) {
+                            // If not in recordedDates, it's missing
+                            if (!recordedDates.has(dateStr)) {
+                                missing.push(dateStr);
+                            }
+                        }
+                    }
+                    checkDate.setDate(checkDate.getDate() + 1);
+                }
+
+                // Sort descending (newest first)
+                missing.sort((a, b) => b.localeCompare(a));
+
+                // Save to cache
+                sessionStorage.setItem(MISSING_DAYS_CACHE_KEY, JSON.stringify({ date: todayStr, missing }));
+                sessionStorage.setItem(MISSING_DAYS_TIME_KEY, now.toString());
+
+                setMissingDates(missing);
+
+                // Calculate past missing dates (exclude today) for login notification
+                const pastMissing = missing.filter(d => d !== todayStr);
+                setPastMissingDates(pastMissing);
+
+                // Show reminder popup if there are past missing days
+                if (!hasCheckedReminder && pastMissing.length > 0) {
+                    setShowAttendanceReminder(true);
+                }
+                setHasCheckedReminder(true);
+            } catch (err) {
+                console.error('Error calculating missing days:', err);
+                setHasCheckedReminder(true);
+            }
+        };
+
+        calculateMissingDays();
+    }, [currentUser.assignedClass, holidays, holidaysLoaded, hasCheckedReminder]);
+
     // --- Logic Handlers ---
 
     const toggleSelection = (id: string) => {
@@ -275,6 +402,10 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             const cacheKey = `att_cache_${selectedDate}_${selectedClass}`;
             sessionStorage.removeItem(cacheKey);
             sessionStorage.removeItem(`${cacheKey}_time`);
+
+            // Invalidate missing days cache to refresh the banner
+            sessionStorage.removeItem(`missing_days_${selectedClass}`);
+            sessionStorage.removeItem(`missing_days_time_${selectedClass}`);
 
             setShowConfirmModal(false);
             setInitialAttendanceState(attendanceState); // Reset to mark as saved
@@ -575,6 +706,56 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
             {/* Student List */}
             <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24 overflow-y-auto">
+                {/* Missing Days Alert Banner */}
+                {missingDates.length > 0 && (
+                    <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-3 mb-2 animate-fade-in">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-500" />
+                                <span className="text-sm font-bold text-red-700">
+                                    ยังไม่ได้บันทึก {missingDates.length} วัน
+                                </span>
+                            </div>
+                            <span className="text-xs text-red-500">💡 กดเลือกวันที่</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {missingDates.slice(0, 5).map(dateStr => {
+                                const [y, m, d] = dateStr.split('-').map(Number);
+                                const date = new Date(y, m - 1, d);
+                                const formatted = date.toLocaleDateString('th-TH', {
+                                    weekday: 'short',
+                                    day: 'numeric',
+                                    month: 'short'
+                                });
+                                const today = new Date();
+                                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                const isToday = dateStr === todayStr;
+                                return (
+                                    <button
+                                        key={dateStr}
+                                        onClick={() => {
+                                            // Toggle: if already selected, go back to today
+                                            if (selectedDate === dateStr) {
+                                                setSelectedDate(todayStr);
+                                            } else {
+                                                setSelectedDate(dateStr);
+                                            }
+                                        }}
+                                        className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all ${selectedDate === dateStr
+                                            ? 'bg-red-500 text-white shadow-md'
+                                            : 'bg-white border border-red-200 text-red-700 hover:bg-red-100'
+                                            }`}
+                                    >
+                                        {isToday ? 'วันนี้' : formatted}
+                                    </button>
+                                );
+                            })}
+                            {missingDates.length > 5 && (
+                                <span className="text-xs text-red-500 py-1.5">+{missingDates.length - 5} วัน</span>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-500" /></div>
                 ) : students.length === 0 ? (
@@ -1127,6 +1308,75 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 isLoading={loading}
             />
 
+            {/* --- ATTENDANCE REMINDER MODAL (Past Missing Days) --- */}
+            {showAttendanceReminder && pastMissingDates.length > 0 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
+                        {/* Header - RED warning */}
+                        <div className="bg-gradient-to-r from-red-500 to-rose-500 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-white/20 p-3 rounded-full animate-pulse">
+                                    <AlertTriangle className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">⚠️ มีวันที่ยังไม่ได้บันทึก!</h3>
+                                    <p className="text-sm text-white/90 mt-0.5">กรุณาบันทึกย้อนหลัง {pastMissingDates.length} วัน</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Body - List of missing dates */}
+                        <div className="px-4 py-4 max-h-[300px] overflow-y-auto">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                                <p className="text-sm text-amber-700 font-medium">
+                                    👆 เลือกวันที่ต้องการบันทึก แล้วระบบจะพาไปหน้าเช็คชื่อให้
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                {pastMissingDates.map(dateStr => {
+                                    const [y, m, d] = dateStr.split('-').map(Number);
+                                    const date = new Date(y, m - 1, d);
+                                    const formatted = date.toLocaleDateString('th-TH', {
+                                        weekday: 'long',
+                                        day: 'numeric',
+                                        month: 'long'
+                                    });
+                                    return (
+                                        <button
+                                            key={dateStr}
+                                            onClick={() => {
+                                                setSelectedDate(dateStr);
+                                                setCurrentView('check');
+                                                setShowAttendanceReminder(false);
+                                            }}
+                                            className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 border border-red-100 rounded-xl transition-all group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-2 h-2 bg-red-500 rounded-full" />
+                                                <span className="text-sm font-medium text-gray-700">{formatted}</span>
+                                            </div>
+                                            <span className="text-xs font-bold text-red-600 group-hover:text-red-700">
+                                                บันทึกเลย →
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Footer - Only close button */}
+                        <div className="px-4 pb-4">
+                            <button
+                                onClick={() => setShowAttendanceReminder(false)}
+                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                            >
+                                ปิด
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Mobile Bottom Navigation */}
             <TeacherBottomNav
                 currentView={currentView}
@@ -1140,6 +1390,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 userClass={selectedClass}
                 isDataStale={isDataStale}
                 onRefresh={onRefresh}
+                missingDaysCount={missingDates.length}
             />
 
             {/* Success Toast */}

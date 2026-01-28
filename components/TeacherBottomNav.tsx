@@ -16,6 +16,8 @@ interface TeacherBottomNavProps {
     userClass?: string;
     isDataStale?: boolean;
     onRefresh?: () => void;
+    missingDaysCount?: number;
+    onShowMissingDays?: () => void;
 }
 
 export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
@@ -30,6 +32,8 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
     userClass = '',
     isDataStale = false,
     onRefresh,
+    missingDaysCount = 0,
+    onShowMissingDays,
 }) => {
     const [showProfile, setShowProfile] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -106,13 +110,21 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                                 )}
                             </button>
                         ) : (
-                            <button
-                                onClick={() => onViewChange('check')}
-                                className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ease-out bg-white border-2 border-[#003060] hover:bg-[#003060] hover:border-[#003060] group"
-                                style={{ boxShadow: '0 2px 10px rgba(0, 48, 96, 0.2)' }}
-                            >
-                                <ClipboardList className="w-7 h-7 text-[#003060] group-hover:text-white transition-colors" />
-                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => onViewChange('check')}
+                                    className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ease-out bg-white border-2 border-[#003060] hover:bg-[#003060] hover:border-[#003060] group"
+                                    style={{ boxShadow: '0 2px 10px rgba(0, 48, 96, 0.2)' }}
+                                >
+                                    <ClipboardList className="w-7 h-7 text-[#003060] group-hover:text-white transition-colors" />
+                                </button>
+                                {/* Missing Days Badge */}
+                                {missingDaysCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg animate-pulse pointer-events-none">
+                                        {missingDaysCount > 9 ? '9+' : missingDaysCount}
+                                    </span>
+                                )}
+                            </div>
                         )}
                     </div>
 

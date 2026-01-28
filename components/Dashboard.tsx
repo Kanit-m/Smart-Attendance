@@ -694,51 +694,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                             </div>
                             <div className="h-1.5 bg-orange-400" />
                         </div>
-                    ) : isSchoolDay ? (
-                        // SCHOOL DAY - RECORDING STATUS
-                        <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
-                            ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
-                            : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
-                            }`}>
-                            <div className="px-5 py-4 flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-full ${isAllSubmitted ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                                        {isAllSubmitted ? (
-                                            <ClipboardCheck className="w-6 h-6 text-emerald-600" />
-                                        ) : (
-                                            <Clock className="w-6 h-6 text-amber-600" />
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h3 className={`font-bold text-lg ${isAllSubmitted ? 'text-emerald-800' : 'text-amber-800'}`}>
-                                            {isAllSubmitted ? '✅ บันทึกครบทุกห้องแล้ว!' : `📊 บันทึกแล้ว ${submittedClasses}/${totalClasses} ห้อง`}
-                                        </h3>
-                                        {isAllSubmitted ? (
-                                            <p className="text-sm text-emerald-600">ข้อมูลวันนี้ครบถ้วน สามารถดูรายงานได้</p>
-                                        ) : (
-                                            <div className="text-sm text-amber-700">
-                                                <span>รอข้อมูลจาก:</span>
-                                                <div className="flex flex-col gap-0.5 mt-1 text-xs font-medium text-amber-800">
-                                                    {missingClasses.map(c => (
-                                                        <span key={c.grade}>• {c.grade}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className={`text-3xl font-bold ${isAllSubmitted ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                    {Math.round((submittedClasses / totalClasses) * 100)}%
-                                </div>
-                            </div>
-                            {/* Progress bar */}
-                            <div className="h-1.5 bg-white/50">
-                                <div
-                                    className={`h-full transition-all duration-1000 ${isAllSubmitted ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                    style={{ width: `${(submittedClasses / totalClasses) * 100}%` }}
-                                />
-                            </div>
-                        </div>
                     ) : null
                 )}
 
