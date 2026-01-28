@@ -5,7 +5,7 @@ import {
     UserCheck, UserX, Clock, Thermometer, Calendar,
     CheckSquare, Square, Contact,
     ClipboardList, ChevronLeft, ChevronRight, PieChart,
-    Building2, RotateCcw, History, Activity, AlertTriangle, ClipboardCheck
+    Building2, RotateCcw, History, Activity, AlertTriangle, ClipboardCheck, Printer
 } from 'lucide-react';
 import {
     collection, getDocs, query, where, writeBatch, doc
@@ -86,6 +86,12 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
     // Track if holidays have been loaded
     const [holidaysLoaded, setHolidaysLoaded] = useState(false);
+
+    // Missing Print Days State (for duty schedule)
+    const [dutySchedule, setDutySchedule] = useState<Record<string, string[]>>({});
+    const [myMissingPrintDays, setMyMissingPrintDays] = useState<string[]>([]);
+    const [showMissingPrintModal, setShowMissingPrintModal] = useState(false);
+    const [dutyScheduleLoaded, setDutyScheduleLoaded] = useState(false);
 
     // Check if there are unsaved changes
     const hasUnsavedChanges = useMemo(() => {
@@ -328,6 +334,112 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
         calculateMissingDays();
     }, [currentUser.assignedClass, holidays, holidaysLoaded, hasCheckedReminder]);
+
+    // Load duty schedule from Firestore
+    useEffect(() => {
+        if (dutyScheduleLoaded) return;
+
+        const loadDutySchedule = async () => {
+            try {
+                const snapshot = await getDocs(collection(db, 'duty_schedules'));
+                const schedule: Record<string, string[]> = {};
+                snapshot.docs.forEach(d => {
+                    const data = d.data();
+                    if (Array.isArray(data.teachers)) {
+                        schedule[d.id] = data.teachers;
+                    }
+                });
+                setDutySchedule(schedule);
+                setDutyScheduleLoaded(true);
+            } catch (err) {
+                console.error('Error loading duty schedule:', err);
+                setDutyScheduleLoaded(true);
+            }
+        };
+
+        loadDutySchedule();
+    }, [dutyScheduleLoaded]);
+
+    // Calculate missing print days for the current teacher's duty days
+    useEffect(() => {
+        if (!currentUser.name || !dutyScheduleLoaded || !holidaysLoaded) return;
+
+        const calculateMissingPrintDays = async () => {
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+                // Start from day 1 of current month
+                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const firstDateStr = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-01`;
+
+                // Find which day names this teacher is on duty
+                const dayMap: Record<number, string> = {
+                    1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday'
+                };
+                const myDutyDayNames: string[] = [];
+                Object.entries(dutySchedule).forEach(([day, teachers]) => {
+                    const teachersList = teachers as string[];
+                    if (teachersList.some(t => t.trim().toLowerCase() === currentUser.name.trim().toLowerCase())) {
+                        myDutyDayNames.push(day);
+                    }
+                });
+
+                if (myDutyDayNames.length === 0) {
+                    setMyMissingPrintDays([]); // Teacher not on any duty
+                    return;
+                }
+
+                // Query print_logs for current month
+                const q = query(
+                    collection(db, 'print_logs'),
+                    where('date', '>=', firstDateStr),
+                    where('date', '<=', todayStr)
+                );
+                const snap = await getDocs(q);
+                const printedDates = new Set<string>();
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    if (data.date) printedDates.add(data.date);
+                });
+
+                // Build list of missing print days (duty days without print log)
+                const missing: string[] = [];
+                const checkDate = new Date(firstDayOfMonth);
+
+                while (checkDate <= today) {
+                    const dayOfWeek = checkDate.getDay();
+                    const dayName = dayMap[dayOfWeek];
+
+                    // Check if this is one of my duty days
+                    if (dayName && myDutyDayNames.includes(dayName)) {
+                        const year = checkDate.getFullYear();
+                        const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(checkDate.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`;
+
+                        // Skip holidays
+                        if (!holidays.find(h => h.date === dateStr)) {
+                            // If not printed, add to missing list
+                            if (!printedDates.has(dateStr)) {
+                                missing.push(dateStr);
+                            }
+                        }
+                    }
+                    checkDate.setDate(checkDate.getDate() + 1);
+                }
+
+                // Sort ascending (oldest first)
+                missing.sort((a, b) => a.localeCompare(b));
+                setMyMissingPrintDays(missing);
+            } catch (err) {
+                console.error('Error calculating missing print days:', err);
+            }
+        };
+
+        calculateMissingPrintDays();
+    }, [currentUser.name, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
 
     // --- Logic Handlers ---
 
@@ -1213,6 +1325,20 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             />
                         </div>
                     )}
+
+                    {/* Missing Print Days Button (Desktop) - Only shows if there are missing days */}
+                    {myMissingPrintDays.length > 0 && (
+                        <button
+                            onClick={() => setShowMissingPrintModal(true)}
+                            className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-95 animate-pulse"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span>ขาดพิมพ์</span>
+                            <span className="min-w-[20px] h-5 bg-white/20 rounded-full flex items-center justify-center text-xs">
+                                {myMissingPrintDays.length}
+                            </span>
+                        </button>
+                    )}
                 </div>
 
                 {/* VIEW CONTENT */}
@@ -1377,6 +1503,95 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 </div>
             )}
 
+            {/* --- MISSING PRINT DAYS MODAL --- */}
+            {showMissingPrintModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-red-500 to-rose-500 px-6 py-5 text-white">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-3 rounded-full">
+                                        <Printer className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold">📅 วันที่ขาดพิมพ์</h3>
+                                        <p className="text-sm text-white/80">
+                                            {new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowMissingPrintModal(false)}
+                                    className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="px-4 py-4 max-h-[350px] overflow-y-auto">
+                            {myMissingPrintDays.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                                    <CheckCircle2 className="w-16 h-16 text-emerald-200 mb-3" />
+                                    <span className="text-lg font-bold text-emerald-600">พิมพ์ครบทุกวันเวรแล้ว! ✅</span>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {myMissingPrintDays.map(dateStr => {
+                                        const [y, m, d] = dateStr.split('-').map(Number);
+                                        const date = new Date(y, m - 1, d);
+                                        const formatted = date.toLocaleDateString('th-TH', {
+                                            weekday: 'short',
+                                            day: 'numeric',
+                                            month: 'short'
+                                        });
+                                        return (
+                                            <button
+                                                key={dateStr}
+                                                onClick={() => {
+                                                    setShowMissingPrintModal(false);
+                                                    window.open(`/print-report?date=${dateStr}`, '_blank');
+                                                }}
+                                                className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 border border-red-100 rounded-xl transition-all group"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                                                    <span className="font-bold text-gray-700">{formatted}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-red-500">❌ ยังไม่พิมพ์</span>
+                                                    <span className="text-sm font-bold text-white bg-red-500 px-3 py-1 rounded-full group-hover:bg-red-600 transition-colors">
+                                                        พิมพ์ →
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm font-bold text-gray-500">สรุป</span>
+                                <span className="text-sm font-bold text-red-600">
+                                    ❗ ขาดพิมพ์ {myMissingPrintDays.length} วัน
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setShowMissingPrintModal(false)}
+                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                            >
+                                ปิด
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Mobile Bottom Navigation */}
             <TeacherBottomNav
                 currentView={currentView}
@@ -1391,6 +1606,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 isDataStale={isDataStale}
                 onRefresh={onRefresh}
                 missingDaysCount={missingDates.length}
+                missingPrintDaysCount={myMissingPrintDays.length}
+                onShowMissingPrintDays={() => setShowMissingPrintModal(true)}
             />
 
             {/* Success Toast */}
