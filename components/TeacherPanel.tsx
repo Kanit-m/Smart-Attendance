@@ -91,6 +91,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [dutySchedule, setDutySchedule] = useState<Record<string, string[]>>({});
     const [myMissingPrintDays, setMyMissingPrintDays] = useState<string[]>([]);
     const [showMissingPrintModal, setShowMissingPrintModal] = useState(false);
+    const [showPrintPopover, setShowPrintPopover] = useState(false);
     const [dutyScheduleLoaded, setDutyScheduleLoaded] = useState(false);
 
     // Check if there are unsaved changes
@@ -1326,19 +1327,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         </div>
                     )}
 
-                    {/* Missing Print Days Button (Desktop) - Only shows if there are missing days */}
-                    {myMissingPrintDays.length > 0 && (
-                        <button
-                            onClick={() => setShowMissingPrintModal(true)}
-                            className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all active:scale-95 animate-pulse"
-                        >
-                            <Printer className="w-4 h-4" />
-                            <span>ขาดพิมพ์</span>
-                            <span className="min-w-[20px] h-5 bg-white/20 rounded-full flex items-center justify-center text-xs">
-                                {myMissingPrintDays.length}
-                            </span>
-                        </button>
-                    )}
+                    {/* Removed - Replaced by floating bubble */}
                 </div>
 
                 {/* VIEW CONTENT */}
@@ -1589,6 +1578,77 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Floating Bubble for Missing Print Days (Desktop Only) */}
+            {myMissingPrintDays.length > 0 && (
+                <div className="hidden md:block fixed bottom-8 right-8 z-40 no-print">
+                    {/* Popover */}
+                    {showPrintPopover && (
+                        <div className="absolute bottom-16 right-0 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden animate-slide-up">
+                            {/* Popover Header */}
+                            <div className="bg-gradient-to-r from-red-500 to-rose-500 px-4 py-3 text-white flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Printer className="w-4 h-4" />
+                                    <span className="font-bold text-sm">วันที่ขาดพิมพ์</span>
+                                </div>
+                                <button
+                                    onClick={() => setShowPrintPopover(false)}
+                                    className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            {/* Popover Content */}
+                            <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
+                                {myMissingPrintDays.map(dateStr => {
+                                    const [y, m, d] = dateStr.split('-').map(Number);
+                                    const date = new Date(y, m - 1, d);
+                                    const formatted = date.toLocaleDateString('th-TH', {
+                                        weekday: 'short',
+                                        day: 'numeric',
+                                        month: 'short'
+                                    });
+                                    return (
+                                        <button
+                                            key={dateStr}
+                                            onClick={() => {
+                                                setShowPrintPopover(false);
+                                                window.open(`/print-report?date=${dateStr}`, '_blank');
+                                            }}
+                                            className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 rounded-xl transition-all group"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                                                <span className="text-sm font-bold text-gray-700">{formatted}</span>
+                                            </div>
+                                            <span className="text-xs font-bold text-white bg-red-500 px-2 py-1 rounded-full group-hover:bg-red-600 transition-colors">
+                                                พิมพ์ →
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {/* Popover Footer */}
+                            <div className="px-4 py-2 bg-gray-50 border-t text-center">
+                                <span className="text-xs font-bold text-red-500">❗ ขาดพิมพ์ {myMissingPrintDays.length} วัน</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Floating Bubble - Larger with Text */}
+                    <button
+                        onClick={() => setShowPrintPopover(!showPrintPopover)}
+                        className={`px-5 py-3 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center gap-3 relative ${showPrintPopover ? 'ring-4 ring-red-200' : 'animate-bounce'}`}
+                    >
+                        <Printer className="w-6 h-6" />
+                        <span className="font-bold text-base">ขาดพิมพ์</span>
+                        {/* Badge */}
+                        <span className="min-w-[26px] h-7 bg-white text-red-600 text-sm font-bold rounded-full flex items-center justify-center px-2 shadow-md border-2 border-red-400">
+                            {myMissingPrintDays.length}
+                        </span>
+                    </button>
                 </div>
             )}
 
