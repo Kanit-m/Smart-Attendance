@@ -94,6 +94,17 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [showPrintPopover, setShowPrintPopover] = useState(false);
     const [dutyScheduleLoaded, setDutyScheduleLoaded] = useState(false);
 
+    // Recording Status for Duty Day (shows all classes' recording status)
+    const [isTodayMyDutyDay, setIsTodayMyDutyDay] = useState(false);
+    const [allClassesRecordingStatus, setAllClassesRecordingStatus] = useState<{
+        grade: string;
+        isRecorded: boolean;
+        totalStudents: number;
+        recordedCount: number;
+    }[]>([]);
+    const [showRecordingPopover, setShowRecordingPopover] = useState(false);
+    const [loadingRecordingStatus, setLoadingRecordingStatus] = useState(false);
+
     // Check if there are unsaved changes
     const hasUnsavedChanges = useMemo(() => {
         return JSON.stringify(attendanceState) !== JSON.stringify(initialAttendanceState);
@@ -441,6 +452,92 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
         calculateMissingPrintDays();
     }, [currentUser.name, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
+
+    // Check if today is my duty day and load all classes recording status
+    useEffect(() => {
+        if (!currentUser.name || !dutyScheduleLoaded || !holidaysLoaded) return;
+
+        const checkDutyDayAndLoadStatus = async () => {
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+                // Check if it's a weekend
+                const dayOfWeek = today.getDay();
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    setIsTodayMyDutyDay(false);
+                    return;
+                }
+
+                // Check if today is a holiday
+                if (holidays.find(h => h.date === todayStr)) {
+                    setIsTodayMyDutyDay(false);
+                    return;
+                }
+
+                // Find which day names this teacher is on duty
+                const dayMap: Record<number, string> = {
+                    1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday'
+                };
+                const todayDayName = dayMap[dayOfWeek];
+
+                // Check if current user is on duty today
+                const dutyTeachers = dutySchedule[todayDayName] || [];
+                const isOnDuty = dutyTeachers.some(t =>
+                    t.trim().toLowerCase() === currentUser.name.trim().toLowerCase()
+                );
+
+                setIsTodayMyDutyDay(isOnDuty);
+
+                if (!isOnDuty) return;
+
+                // Load recording status for all classes
+                setLoadingRecordingStatus(true);
+
+                // Get all grades and calculate status
+                const statusByGrade: typeof allClassesRecordingStatus = [];
+
+                // Get attendance records for today
+                const q = query(collection(db, 'attendance'), where('date', '==', todayStr));
+                const attSnap = await getDocs(q);
+                const attendanceByGrade = new Map<string, number>();
+                attSnap.docs.forEach(d => {
+                    const data = d.data();
+                    const grade = data.grade as string;
+                    attendanceByGrade.set(grade, (attendanceByGrade.get(grade) || 0) + 1);
+                });
+
+                // Calculate for each grade
+                for (const grade of GRADE_OPTIONS) {
+                    const studentsInGrade = allStudents.filter(s => {
+                        // Only active students
+                        if (s.grade !== grade) return false;
+                        if (s.status === StudentStatus.WITHDRAWN) return false;
+                        return true;
+                    });
+
+                    const totalStudents = studentsInGrade.length;
+                    const recordedCount = attendanceByGrade.get(grade) || 0;
+
+                    statusByGrade.push({
+                        grade,
+                        isRecorded: totalStudents > 0 && recordedCount >= totalStudents,
+                        totalStudents,
+                        recordedCount
+                    });
+                }
+
+                setAllClassesRecordingStatus(statusByGrade);
+                setLoadingRecordingStatus(false);
+            } catch (err) {
+                console.error('Error checking duty day status:', err);
+                setLoadingRecordingStatus(false);
+            }
+        };
+
+        checkDutyDayAndLoadStatus();
+    }, [currentUser.name, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded, allStudents]);
 
     // --- Logic Handlers ---
 
@@ -1335,7 +1432,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 {currentView === 'dashboard' && RenderDashboard()}
                 {currentView === 'room_history' && RenderRoomHistory()}
                 {currentView === 'school_dashboard' && (
-                    <Dashboard embedded students={allStudents} />
+                    <Dashboard embedded students={allStudents} isDutyTeacher={isTodayMyDutyDay} />
                 )}
 
             </div>
@@ -1580,6 +1677,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                     </div>
                 </div>
             )}
+
+            {/* Recording status is now shown in Dashboard card instead of floating bubble */}
 
             {/* Floating Bubble for Missing Print Days (All Devices) - Like poison status! */}
             {myMissingPrintDays.length > 0 && (

@@ -162,7 +162,15 @@ export const PrintReportPage: React.FC = () => {
             });
     }, [activeStudents, attendances]);
 
+    // State for no data warning
+    const [showNoDataWarning, setShowNoDataWarning] = useState(false);
+
     const handlePrintClick = async () => {
+        // Prevent printing when data is not loaded (e.g., quota exceeded)
+        if (activeStudents.length === 0) {
+            setShowNoDataWarning(true);
+            return;
+        }
         if (missingClasses.length > 0) {
             setShowWarningModal(true);
             return;
@@ -452,6 +460,64 @@ export const PrintReportPage: React.FC = () => {
                                 className="w-full py-3 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-colors"
                             >
                                 เข้าใจแล้ว
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Warning Modal - No Data (Quota Exceeded) */}
+            {showNoDataWarning && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in print:hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-red-50">
+                            <h3 className="font-bold text-lg text-red-800 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-600" />
+                                ไม่พบข้อมูลนักเรียน
+                            </h3>
+                            <button
+                                onClick={() => setShowNoDataWarning(false)}
+                                className="p-1 hover:bg-red-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-red-600" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6">
+                            <div className="text-center mb-6">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                                    <AlertTriangle className="w-8 h-8 text-red-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-800 mb-2">
+                                    ไม่สามารถพิมพ์ได้
+                                </h4>
+                                <p className="text-sm text-gray-500">
+                                    ยังไม่มีข้อมูลนักเรียนโหลดเข้ามา<br />
+                                    อาจเกิดจากโควต้าการอ่านข้อมูลเต็ม<br />
+                                    กรุณารอสักครู่แล้วกดรีเฟรชอีกครั้ง
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                            <button
+                                onClick={() => setShowNoDataWarning(false)}
+                                className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-100 transition-colors"
+                            >
+                                ปิด
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowNoDataWarning(false);
+                                    handleRefreshData();
+                                }}
+                                className="flex-1 py-3 rounded-xl bg-emerald-500 text-white font-bold hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                                รีเฟรชข้อมูล
                             </button>
                         </div>
                     </div>

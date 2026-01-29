@@ -17,6 +17,7 @@ interface DashboardProps {
     students?: Student[];
     holidays?: Holiday[];  // Pass from parent to avoid refetch on remount
     isAdmin?: boolean;  // Show admin-only features like recording status
+    isDutyTeacher?: boolean;  // Show recording status card for duty teachers
 }
 
 interface GradeStats {
@@ -34,7 +35,7 @@ interface GradeStats {
     isSubmitted: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays, isAdmin = false }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays, isAdmin = false, isDutyTeacher = false }) => {
     // Initialize with Today's date
     const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const dateInputRef = useRef<HTMLInputElement>(null);
@@ -698,8 +699,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                     ) : null
                 )}
 
-                {/* RECORDING STATUS SUMMARY - Show which classes have/haven't recorded (Admin only) */}
-                {isAdmin && isSchoolDay && totalClasses > 0 && (
+                {/* RECORDING STATUS SUMMARY - Show which classes have/haven't recorded (Admin or Duty Teacher) */}
+                {(isAdmin || isDutyTeacher) && isSchoolDay && totalClasses > 0 && (
                     <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
                         ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'
                         : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
