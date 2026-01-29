@@ -49,6 +49,7 @@ function App() {
   const [showContent, setShowContent] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [isDataStale, setIsDataStale] = useState(false); // true = needs refresh (red), false = up-to-date (green)
+  const [viewAsTeacherName, setViewAsTeacherName] = useState<string | null>(null); // Admin can view as specific teacher
 
   // Check if returning user (has saved session)
   const hasSession = localStorage.getItem('app_view') && localStorage.getItem('app_view') !== 'landing';
@@ -318,7 +319,14 @@ function App() {
               <h2 className="text-2xl font-bold text-gray-800">ระบบผู้ดูแล</h2>
               <p className="text-gray-500">จัดการข้อมูลนักเรียน ครู และการตั้งค่าระบบ</p>
             </div>
-            <AdminPanel onSwitchToTeacherView={() => setView('teacher')} onLogout={handleLogout} onStudentChange={() => fetchStudents(true)} />
+            <AdminPanel
+              onSwitchToTeacherView={(teacherName?: string) => {
+                setViewAsTeacherName(teacherName || null);
+                setView('teacher');
+              }}
+              onLogout={handleLogout}
+              onStudentChange={() => fetchStudents(true)}
+            />
           </div>
         )}
 
@@ -331,10 +339,14 @@ function App() {
             <TeacherPanel
               currentUser={currentUser!}
               allStudents={students}
-              onBackToAdmin={currentUser?.role === Role.ADMIN ? () => setView('admin') : undefined}
+              onBackToAdmin={currentUser?.role === Role.ADMIN ? () => {
+                setViewAsTeacherName(null);
+                setView('admin');
+              } : undefined}
               onLogout={handleLogout}
               isDataStale={isDataStale}
               onRefresh={() => fetchStudents(true)}
+              viewAsTeacherName={viewAsTeacherName}
             />
           </div>
         )}

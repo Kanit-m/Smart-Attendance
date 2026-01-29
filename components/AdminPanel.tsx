@@ -21,7 +21,7 @@ import { AdminBottomNav } from './AdminBottomNav';
 import { NotificationSettingsPanel } from './NotificationSettings';
 
 interface AdminPanelProps {
-  onSwitchToTeacherView: () => void;
+  onSwitchToTeacherView: (teacherName?: string) => void;
   onLogout: () => void;
   onStudentChange?: () => void; // Called after student data changes (add/delete/withdraw)
 }
@@ -73,6 +73,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<AppUser[]>([]);
+  const [selectedViewAsTeacher, setSelectedViewAsTeacher] = useState<string>(''); // For view-as-teacher feature
 
   // Holidays are managed via Calendar tab now
   const [filterGrade, setFilterGrade] = useState<string>('');
