@@ -153,17 +153,9 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                     ) : (
                         <button
                             onClick={() => setShowProfile(true)}
-                            className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] text-gray-400 active:bg-gray-50"
+                            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 min-w-[56px] text-gray-400 active:bg-gray-50"
                         >
-                            <div className="relative">
-                                <CircleUser className="w-5 h-5" />
-                                {/* Badge for missing print days */}
-                                {missingPrintDaysCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 animate-pulse">
-                                        {missingPrintDaysCount}
-                                    </span>
-                                )}
-                            </div>
+                            <CircleUser className="w-5 h-5" />
                             <span className="text-[10px] font-medium">โปรไฟล์</span>
                         </button>
                     )}
@@ -220,20 +212,6 @@ export const TeacherBottomNav: React.FC<TeacherBottomNavProps> = ({
                                 {isRefreshing ? 'กำลังรีเฟรช...' : isDataStale ? '⚠️ อัพเดตข้อมูล' : '✓ อัพเดตข้อมูล'}
                             </span>
                         </button>
-
-                        {/* Missing Print Days Button - Only shows if count > 0 */}
-                        {missingPrintDaysCount > 0 && onShowMissingPrintDays && (
-                            <button
-                                onClick={() => {
-                                    setShowProfile(false);
-                                    onShowMissingPrintDays();
-                                }}
-                                className="w-full flex items-center justify-center gap-2 py-3.5 mb-3 font-bold rounded-xl transition-all active:scale-[0.98] bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg animate-pulse"
-                            >
-                                <Printer className="w-5 h-5" />
-                                <span>ขาดพิมพ์ {missingPrintDaysCount} วัน</span>
-                            </button>
-                        )}
 
                         {/* Logout Button */}
                         <button

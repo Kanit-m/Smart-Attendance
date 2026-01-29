@@ -1581,9 +1581,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 </div>
             )}
 
-            {/* Floating Bubble for Missing Print Days (Desktop Only) */}
+            {/* Floating Bubble for Missing Print Days (All Devices) - Like poison status! */}
             {myMissingPrintDays.length > 0 && (
-                <div className="hidden md:block fixed bottom-8 right-8 z-40 no-print">
+                <div className="fixed z-40 no-print bottom-20 right-4 md:bottom-8 md:right-8">
                     {/* Popover */}
                     {showPrintPopover && (
                         <div className="absolute bottom-16 right-0 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden animate-slide-up">
@@ -1591,7 +1591,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             <div className="bg-gradient-to-r from-red-500 to-rose-500 px-4 py-3 text-white flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Printer className="w-4 h-4" />
-                                    <span className="font-bold text-sm">วันที่ขาดพิมพ์</span>
+                                    <span className="font-bold text-sm">🔥 วันที่ขาดพิมพ์</span>
                                 </div>
                                 <button
                                     onClick={() => setShowPrintPopover(false)}
@@ -1632,20 +1632,23 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             </div>
                             {/* Popover Footer */}
                             <div className="px-4 py-2 bg-gray-50 border-t text-center">
-                                <span className="text-xs font-bold text-red-500">❗ ขาดพิมพ์ {myMissingPrintDays.length} วัน</span>
+                                <span className="text-xs font-bold text-red-500">⚠️ กรุณาพิมพ์ให้ครบ!</span>
                             </div>
                         </div>
                     )}
 
-                    {/* Floating Bubble - Larger with Text */}
+                    {/* Floating Bubble - Annoying poison status style! */}
                     <button
                         onClick={() => setShowPrintPopover(!showPrintPopover)}
-                        className={`px-5 py-3 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center gap-3 relative ${showPrintPopover ? 'ring-4 ring-red-200' : 'animate-bounce'}`}
+                        className={`px-4 py-2.5 md:px-5 md:py-3 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-xl transition-all active:scale-95 flex items-center gap-2 md:gap-3 ${showPrintPopover ? 'ring-4 ring-red-200 scale-100' : 'animate-bounce shadow-red-500/50'}`}
+                        style={{
+                            boxShadow: showPrintPopover ? undefined : '0 0 20px rgba(239, 68, 68, 0.5), 0 0 40px rgba(239, 68, 68, 0.3)'
+                        }}
                     >
-                        <Printer className="w-6 h-6" />
-                        <span className="font-bold text-base">ขาดพิมพ์</span>
+                        <Printer className="w-5 h-5 md:w-6 md:h-6" />
+                        <span className="font-bold text-sm md:text-base">ขาดพิมพ์</span>
                         {/* Badge */}
-                        <span className="min-w-[26px] h-7 bg-white text-red-600 text-sm font-bold rounded-full flex items-center justify-center px-2 shadow-md border-2 border-red-400">
+                        <span className="min-w-[24px] h-6 md:min-w-[26px] md:h-7 bg-white text-red-600 text-xs md:text-sm font-bold rounded-full flex items-center justify-center px-1.5 md:px-2 shadow-md border-2 border-red-400">
                             {myMissingPrintDays.length}
                         </span>
                     </button>
