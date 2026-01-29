@@ -5,7 +5,7 @@ import {
     UserCheck, UserX, Clock, Thermometer, Calendar,
     CheckSquare, Square, Contact,
     ClipboardList, ChevronLeft, ChevronRight, PieChart,
-    Building2, RotateCcw, History, Activity, AlertTriangle, ClipboardCheck, Printer
+    Building2, RotateCcw, History, Activity, AlertTriangle, ClipboardCheck, Printer, Eye
 } from 'lucide-react';
 import {
     collection, getDocs, query, where, writeBatch, doc
@@ -25,6 +25,7 @@ interface TeacherPanelProps {
     onLogout: () => void;
     isDataStale?: boolean;
     onRefresh?: () => void;
+    viewAsTeacherName?: string | null; // Admin can view as specific teacher
 }
 
 const GRADE_OPTIONS = [
@@ -41,7 +42,9 @@ const STATUS_CONFIG = [
     { status: AttendanceStatus.ABSENT, label: 'ขาด', color: 'bg-rose-500 hover:bg-rose-600', text: 'text-rose-600', bg: 'bg-rose-100', icon: UserX },
 ];
 
-export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout, isDataStale = false, onRefresh }) => {
+export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout, isDataStale = false, onRefresh, viewAsTeacherName }) => {
+    // Compute effective teacher name for duty calculation (Admin can view as another teacher)
+    const effectiveTeacherName = viewAsTeacherName || currentUser.name;
     // Navigation & View State
     const [currentView, setCurrentView] = useState<'check' | 'dashboard' | 'school_dashboard' | 'room_history'>('school_dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Desktop default open
@@ -393,7 +396,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 const myDutyDayNames: string[] = [];
                 Object.entries(dutySchedule).forEach(([day, teachers]) => {
                     const teachersList = teachers as string[];
-                    if (teachersList.some(t => t.trim().toLowerCase() === currentUser.name.trim().toLowerCase())) {
+                    if (teachersList.some(t => t.trim().toLowerCase() === effectiveTeacherName.trim().toLowerCase())) {
                         myDutyDayNames.push(day);
                     }
                 });
@@ -451,11 +454,11 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         };
 
         calculateMissingPrintDays();
-    }, [currentUser.name, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
+    }, [effectiveTeacherName, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
 
     // Check if today is my duty day and load all classes recording status
     useEffect(() => {
-        if (!currentUser.name || !dutyScheduleLoaded || !holidaysLoaded) return;
+        if (!effectiveTeacherName || !dutyScheduleLoaded || !holidaysLoaded) return;
 
         const checkDutyDayAndLoadStatus = async () => {
             try {
@@ -485,7 +488,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 // Check if current user is on duty today
                 const dutyTeachers = dutySchedule[todayDayName] || [];
                 const isOnDuty = dutyTeachers.some(t =>
-                    t.trim().toLowerCase() === currentUser.name.trim().toLowerCase()
+                    t.trim().toLowerCase() === effectiveTeacherName.trim().toLowerCase()
                 );
 
                 setIsTodayMyDutyDay(isOnDuty);
@@ -537,7 +540,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         };
 
         checkDutyDayAndLoadStatus();
-    }, [currentUser.name, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded, allStudents]);
+    }, [effectiveTeacherName, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded, allStudents]);
 
     // --- Logic Handlers ---
 
@@ -1370,6 +1373,14 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             <div className="flex-1 flex flex-col min-h-0 relative print:bg-white print:overflow-visible bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-y-auto">
 
                 {/* HEADER */}
+                {/* View-As-Teacher Banner */}
+                {viewAsTeacherName && (
+                    <div className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-center text-sm font-bold flex items-center justify-center gap-2 no-print">
+                        <Eye className="w-4 h-4" />
+                        กำลังดูในมุมมองของ: {viewAsTeacherName}
+                        <span className="text-xs opacity-80">(ข้อมูลเวรจะแสดงตามชื่อครูนี้)</span>
+                    </div>
+                )}
                 <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 z-20 no-print">
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         {/* Back to Admin button - only on desktop */}

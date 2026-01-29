@@ -1181,13 +1181,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         </div>
 
         {/* Switch to Teacher View Button at bottom */}
-        <div className="mt-auto p-4 border-t border-white/30">
+        <div className="mt-auto p-4 border-t border-white/30 space-y-2">
+          <label className="text-xs font-bold text-gray-600 block">ดูมุมมองครู</label>
+          <select
+            value={selectedViewAsTeacher}
+            onChange={(e) => setSelectedViewAsTeacher(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
+          >
+            <option value="">-- ตัวเอง (Admin) --</option>
+            {teachers.map(t => (
+              <option key={t.id} value={t.name}>{t.name}</option>
+            ))}
+          </select>
           <button
-            onClick={onSwitchToTeacherView}
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all"
+            onClick={() => onSwitchToTeacherView(selectedViewAsTeacher || undefined)}
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all"
           >
             <GraduationCap className="w-5 h-5" />
-            สลับไปมุมมองครู
+            {selectedViewAsTeacher ? `ดูเป็น ${selectedViewAsTeacher}` : 'สลับไปมุมมองครู'}
           </button>
         </div>
       </div>
