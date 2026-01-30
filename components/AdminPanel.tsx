@@ -195,7 +195,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if ((activeTab === 0 || activeTab === 1 || activeTab === 4) && !dataLoaded.students) {
       fetchStudents();
     }
-    if ((activeTab === 3 || activeTab === 10) && !dataLoaded.teachers) {
+    // Also load teachers on tab 0 (Dashboard) for view-as-teacher dropdown
+    if ((activeTab === 0 || activeTab === 3 || activeTab === 10) && !dataLoaded.teachers) {
       fetchTeachers();
     }
     // if (activeTab === 0 || activeTab === 6) { // Tab 5 no longer needs holiday fetch for UI, but dashboard might need it
