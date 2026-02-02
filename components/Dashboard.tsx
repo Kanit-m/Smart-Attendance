@@ -459,7 +459,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     }
 
     const containerClass = embedded
-        ? "flex-1 p-4 md:p-8 pb-24 space-y-6 animate-fade-in text-black bg-white snap-y snap-proximity md:snap-none"
+        ? "flex-1 p-4 md:p-8 pb-36 space-y-6 animate-fade-in text-black bg-white snap-y snap-proximity md:snap-none"
         : "max-w-7xl mx-auto px-4 py-6 space-y-6 animate-fade-in text-black";
 
     // Render Helper for Carousel

@@ -596,6 +596,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         setSaving(true);
         try {
             const batch = writeBatch(db);
+            // Use viewAsTeacherName if admin is viewing as teacher, otherwise use current user name
+            const recorderName = viewAsTeacherName || currentUser.name;
+
             students.forEach(s => {
                 const ref = doc(db, 'attendance', `${selectedDate}_${s.id}`);
                 batch.set(ref, {
@@ -606,7 +609,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                     grade: s.grade || selectedClass,
                     gender: s.gender || 'ชาย',
                     status: attendanceState[s.id] || AttendanceStatus.PRESENT,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    recordedBy: recorderName // บันทึกชื่อผู้บันทึก
                 });
             });
             await batch.commit();
@@ -918,7 +922,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             </div>
 
             {/* Student List */}
-            <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-24 overflow-y-auto">
+            <div className="flex-1 p-2 sm:p-4 space-y-2 sm:space-y-3 pb-36 overflow-y-auto">
                 {/* Missing Days Alert Banner */}
                 {missingDates.length > 0 && (
                     <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-3 mb-2 animate-fade-in">
@@ -1059,7 +1063,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     );
 
     const RenderDashboard = () => (
-        <div className="flex-1 p-4 md:p-8 pb-24 space-y-6">
+        <div className="flex-1 p-4 md:p-8 pb-36 space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm animate-fade-slide-up" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
@@ -1154,7 +1158,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     );
 
     const RenderRoomHistory = () => (
-        <div className="flex-1 p-4 md:p-8 pb-24 space-y-6">
+        <div className="flex-1 p-4 md:p-8 pb-36 space-y-6">
             {/* Controls */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
                 <div>

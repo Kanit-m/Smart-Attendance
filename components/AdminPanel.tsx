@@ -4,7 +4,7 @@ import {
   UserPlus, Users, Upload, Trash2, Loader2,
   CheckCircle, XCircle, AlertTriangle, LayoutDashboard,
   GraduationCap, Pencil, Edit2, UserMinus, RotateCcw, Clock,
-  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer, Bell, ClipboardList
+  ArrowUpDown, ArrowUp, ArrowDown, Sun, CalendarDays, Printer, ClipboardList, Activity
 } from 'lucide-react';
 import {
   collection, addDoc, getDocs, deleteDoc, doc,
@@ -18,7 +18,7 @@ import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
 import { AdminBottomNav } from './AdminBottomNav';
-import { NotificationSettingsPanel } from './NotificationSettings';
+import { TeacherStatusCard } from './TeacherStatusCard';
 
 interface AdminPanelProps {
   onSwitchToTeacherView: (teacherName?: string) => void;
@@ -104,7 +104,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
   // State for attendance recording times view
   const [recordTimesDate, setRecordTimesDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
-  const [attendanceRecords, setAttendanceRecords] = useState<{ grade: string; timestamp: number | null }[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<{ grade: string; timestamp: number | null; recordedBy: string | null }[]>([]);
   const [loadingRecordTimes, setLoadingRecordTimes] = useState(false);
   const [timeDistribution, setTimeDistribution] = useState<{ hour: string; count: number }[]>([]);
   const [sortByTime, setSortByTime] = useState<'asc' | 'desc' | null>(null);
@@ -138,12 +138,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [logCurrentPage, setLogCurrentPage] = useState(1);
   const LOGS_PER_PAGE = 5;
 
-  // LINE notification for unrecorded classes
-  const [showNotifyModal, setShowNotifyModal] = useState(false);
-  const [selectedProfileForNotify, setSelectedProfileForNotify] = useState<string>('');
-  const [notificationProfiles, setNotificationProfiles] = useState<{ id: string; name: string; lineGroupId: string; lineChannelToken: string }[]>([]);
-  const [sendingNotification, setSendingNotification] = useState(false);
-
   // Print logs date range view (Monitor tab)
   const [printLogStartDate, setPrintLogStartDate] = useState(() => {
     const d = new Date();
@@ -161,7 +155,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   const [loadingPrintLogs, setLoadingPrintLogs] = useState(false);
   const [printLogCurrentPage, setPrintLogCurrentPage] = useState(1);
   const PRINT_LOGS_PER_PAGE = 5;
-  const [showPrintNotifyModal, setShowPrintNotifyModal] = useState(false);
 
   // Duty schedule state
   const DAY_NAMES = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
@@ -181,6 +174,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   });
   const [loadingDuty, setLoadingDuty] = useState(false);
   const [savingDuty, setSavingDuty] = useState(false);
+
+  // Teacher Status state (for RPG-style Status tab)
+  const [teacherStatuses, setTeacherStatuses] = useState<{
+    teacher: AppUser;
+    dutyDays: string[];
+    attendanceStats: { recordedDays: number; totalWorkDays: number; todayRecorded: boolean };
+    printStats: { printedDays: number; totalDutyDays: number; missingPrintDays: string[] };
+    isTodayDuty: boolean;
+  }[]>([]);
+  const [loadingTeacherStatus, setLoadingTeacherStatus] = useState(false);
+  const [teacherStatusSort, setTeacherStatusSort] = useState<'name' | 'position' | 'level' | 'status'>('name');
 
   // Track if data has been loaded to prevent redundant fetches
   const [dataLoaded, setDataLoaded] = useState({
@@ -216,6 +220,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     if (activeTab === 10 && !dataLoaded.duty) {
       fetchDutySchedule();
     }
+    // Tab 9: Teacher Status - needs teachers, duty schedule, and calendar
+    if (activeTab === 9) {
+      if (!dataLoaded.teachers) fetchTeachers();
+      if (!dataLoaded.duty) fetchDutySchedule();
+      if (!dataLoaded.calendar) fetchCalendarEvents();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]); // Remove dataLoaded from dependencies to prevent potential loop
 
@@ -234,6 +244,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordTimesDate]);
+
+  // Fetch teacher statuses when tab 9 and all required data is loaded
+  useEffect(() => {
+    if (activeTab === 9 && dataLoaded.teachers && dataLoaded.duty && dataLoaded.calendar) {
+      fetchTeacherStatuses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dataLoaded.teachers, dataLoaded.duty, dataLoaded.calendar]);
 
   // Sync editing event to form
   useEffect(() => {
@@ -353,22 +371,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       const q = query(collection(db, 'attendance'), where('date', '==', recordTimesDate));
       const snapshot = await getDocs(q);
 
-      // Group by grade and get the latest timestamp for each grade
-      const gradeTimestamps: Record<string, number> = {};
+      // Group by grade and get the latest timestamp + recordedBy for each grade
+      const gradeData: Record<string, { timestamp: number; recordedBy: string | null }> = {};
 
       snapshot.docs.forEach(d => {
         const data = d.data();
         const grade = data.grade as string;
         const ts = data.timestamp as number;
-        if (!gradeTimestamps[grade] || ts > gradeTimestamps[grade]) {
-          gradeTimestamps[grade] = ts;
+        const recordedBy = data.recordedBy as string | null || null;
+        if (!gradeData[grade] || ts > gradeData[grade].timestamp) {
+          gradeData[grade] = { timestamp: ts, recordedBy };
         }
       });
 
       // Create array for all grades with their timestamps (null if not recorded)
       const results = GRADE_OPTIONS.map(grade => ({
         grade,
-        timestamp: gradeTimestamps[grade] || null
+        timestamp: gradeData[grade]?.timestamp || null,
+        recordedBy: gradeData[grade]?.recordedBy || null
       }));
 
       setAttendanceRecords(results);
@@ -552,93 +572,131 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     }
   };
 
-  // Fetch notification profiles for LINE notification modal
-  const fetchNotificationProfiles = async () => {
+  // Fetch all teacher statuses for the Status tab
+  const fetchTeacherStatuses = async () => {
+    if (teachers.length === 0) return;
+    setLoadingTeacherStatus(true);
+
     try {
-      const profilesSnap = await getDocs(collection(db, 'settings', 'notifications', 'profiles'));
-      const profiles: typeof notificationProfiles = [];
-      profilesSnap.forEach(d => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toLocaleDateString('sv-SE');
+
+      // Start from day 1 of current month
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const firstDateStr = firstDayOfMonth.toLocaleDateString('sv-SE');
+
+      // Get today's day name for duty check
+      const dayOfWeek = today.getDay();
+      const dayMap: Record<number, string> = {
+        1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday'
+      };
+      const todayDayName = dayMap[dayOfWeek] || '';
+
+      // Get holiday dates from calendarEvents
+      const holidayDates = new Set(
+        calendarEvents.filter(e => e.type === 'holiday').map(e => e.date)
+      );
+
+      // Query attendance records for current month
+      const attQuery = query(
+        collection(db, 'attendance'),
+        where('date', '>=', firstDateStr),
+        where('date', '<=', todayStr)
+      );
+      const attSnap = await getDocs(attQuery);
+
+      // Build map of recorded dates per grade
+      const recordedByGrade = new Map<string, Set<string>>();
+      attSnap.docs.forEach(d => {
         const data = d.data();
-        if (data.enabled && data.lineGroupId && data.lineChannelToken) {
-          profiles.push({
-            id: d.id,
-            name: data.name || 'ไม่มีชื่อ',
-            lineGroupId: data.lineGroupId,
-            lineChannelToken: data.lineChannelToken
-          });
+        if (!recordedByGrade.has(data.grade)) {
+          recordedByGrade.set(data.grade, new Set());
         }
+        recordedByGrade.get(data.grade)!.add(data.date);
       });
-      setNotificationProfiles(profiles);
-      if (profiles.length > 0 && !selectedProfileForNotify) {
-        setSelectedProfileForNotify(profiles[0].id);
+
+      // Query print logs for current month
+      const printQuery = query(
+        collection(db, 'print_logs'),
+        where('date', '>=', firstDateStr),
+        where('date', '<=', todayStr)
+      );
+      const printSnap = await getDocs(printQuery);
+      const printedDates = new Set<string>();
+      printSnap.docs.forEach(d => {
+        const data = d.data();
+        if (data.date) printedDates.add(data.date);
+      });
+
+      // Calculate working days this month
+      const workDays: string[] = [];
+      const checkDate = new Date(firstDayOfMonth);
+      while (checkDate <= today) {
+        const dow = checkDate.getDay();
+        const dateStr = checkDate.toLocaleDateString('sv-SE');
+        if (dow !== 0 && dow !== 6 && !holidayDates.has(dateStr)) {
+          workDays.push(dateStr);
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
       }
+
+      // Calculate status for each teacher
+      const statuses = teachers.map(teacher => {
+        // Find which days this teacher is on duty
+        const teacherDutyDays: string[] = [];
+        Object.entries(dutySchedule).forEach(([day, teachersList]) => {
+          if (teachersList.some(t => t.trim().toLowerCase() === teacher.name.trim().toLowerCase())) {
+            teacherDutyDays.push(day);
+          }
+        });
+
+        // Calculate teacher's duty dates this month
+        const dutyDates: string[] = [];
+        workDays.forEach(dateStr => {
+          const d = new Date(dateStr);
+          const dayName = dayMap[d.getDay()];
+          if (dayName && teacherDutyDays.includes(dayName)) {
+            dutyDates.push(dateStr);
+          }
+        });
+
+        // Calculate attendance stats for teacher's class
+        const teacherClass = teacher.assignedClass || '';
+        const classRecordedDates = recordedByGrade.get(teacherClass) || new Set();
+        const recordedDays = workDays.filter(d => classRecordedDates.has(d)).length;
+        const todayRecorded = classRecordedDates.has(todayStr);
+
+        // Calculate print stats for teacher's duty days
+        const printedDutyDays = dutyDates.filter(d => printedDates.has(d)).length;
+        const missingPrintDays = dutyDates.filter(d => !printedDates.has(d));
+
+        // Check if today is teacher's duty day
+        const isTodayDuty = teacherDutyDays.includes(todayDayName);
+
+        return {
+          teacher,
+          dutyDays: teacherDutyDays,
+          attendanceStats: {
+            recordedDays,
+            totalWorkDays: workDays.length,
+            todayRecorded
+          },
+          printStats: {
+            printedDays: printedDutyDays,
+            totalDutyDays: dutyDates.length,
+            missingPrintDays
+          },
+          isTodayDuty
+        };
+      });
+
+      setTeacherStatuses(statuses);
     } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Get unrecorded classes for notification
-  const getUnrecordedSummary = () => {
-    const summary: { date: string; classes: string[] }[] = [];
-    recordingLogs.forEach(log => {
-      const unrecorded = log.grades.filter(g => !g.recorded).map(g => g.grade);
-      if (unrecorded.length > 0) {
-        summary.push({ date: log.date, classes: unrecorded });
-      }
-    });
-    return summary;
-  };
-
-  // Send LINE notification for unrecorded classes
-  const sendUnrecordedNotification = async () => {
-    const profile = notificationProfiles.find(p => p.id === selectedProfileForNotify);
-    if (!profile) {
-      showToast('กรุณาเลือกกลุ่มที่ต้องการแจ้งเตือน', 'error');
-      return;
-    }
-
-    const unrecordedSummary = getUnrecordedSummary();
-    if (unrecordedSummary.length === 0) {
-      showToast('ทุกห้องบันทึกครบแล้ว ไม่มีข้อมูลให้ส่ง', 'error');
-      return;
-    }
-
-    setSendingNotification(true);
-    try {
-      // Build message
-      const lines = ['⚠️ แจ้งเตือน: ห้องที่ยังไม่บันทึกการเช็คชื่อ', '━━━━━━━━━━'];
-      unrecordedSummary.forEach(item => {
-        const dateObj = new Date(item.date);
-        const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
-        lines.push(`📅 ${thaiDate}: ${item.classes.join(', ')}`);
-      });
-      lines.push('━━━━━━━━━━', 'กรุณาตรวจสอบและบันทึกให้ครบ');
-
-      const message = lines.join('\n');
-
-      // Send via LINE API
-      const response = await fetch('/api/line/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: profile.lineChannelToken,
-          groupId: profile.lineGroupId,
-          message: message
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        showToast('ส่งแจ้งเตือนสำเร็จ!', 'success');
-        setShowNotifyModal(false);
-      } else {
-        showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showToast('เกิดข้อผิดพลาดในการส่ง', 'error');
+      console.error('Error fetching teacher statuses:', e);
+      showToast('โหลดข้อมูลสถานะครูไม่สำเร็จ', 'error');
     } finally {
-      setSendingNotification(false);
+      setLoadingTeacherStatus(false);
     }
   };
 
@@ -706,64 +764,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
     } finally {
       setLoadingPrintLogs(false);
-    }
-  };
-
-  // Get unprinted dates for notification
-  const getUnprintedSummary = () => {
-    return printLogs.filter(log => !log.printed).map(log => log.date);
-  };
-
-  // Send LINE notification for unprinted reports
-  const sendUnprintedNotification = async () => {
-    const profile = notificationProfiles.find(p => p.id === selectedProfileForNotify);
-    if (!profile) {
-      showToast('กรุณาเลือกกลุ่มที่ต้องการแจ้งเตือน', 'error');
-      return;
-    }
-
-    const unprintedDates = getUnprintedSummary();
-    if (unprintedDates.length === 0) {
-      showToast('ทุกวันพิมพ์รายงานครบแล้ว ไม่มีข้อมูลให้ส่ง', 'error');
-      return;
-    }
-
-    setSendingNotification(true);
-    try {
-      // Build message
-      const lines = ['⚠️ แจ้งเตือน: รายงานประจำวันที่ยังไม่ได้พิมพ์', '━━━━━━━━━━'];
-      unprintedDates.forEach(dateStr => {
-        const dateObj = new Date(dateStr);
-        const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
-        lines.push(`📅 ${thaiDate}`);
-      });
-      lines.push('━━━━━━━━━━', 'กรุณาดำเนินการพิมพ์รายงาน');
-
-      const message = lines.join('\n');
-
-      // Send via LINE API
-      const response = await fetch('/api/line/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: profile.lineChannelToken,
-          groupId: profile.lineGroupId,
-          message: message
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        showToast('ส่งแจ้งเตือนสำเร็จ!', 'success');
-        setShowPrintNotifyModal(false);
-      } else {
-        showToast(data.error || 'ส่งไม่สำเร็จ', 'error');
-      }
-    } catch (e) {
-      console.error(e);
-      showToast('เกิดข้อผิดพลาดในการส่ง', 'error');
-    } finally {
-      setSendingNotification(false);
     }
   };
 
@@ -1076,11 +1076,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       // UPDATE Mode
       setLoadingAction(true);
       try {
-        await updateDoc(doc(db, 'users', editingTeacher.id), {
+        const updateData: any = {
           name: newTeacher.name,
           assignedClass: newTeacher.assignedClass
-        });
-        setTeachers(prev => prev.map(t => t.id === editingTeacher.id ? { ...t, name: newTeacher.name, assignedClass: newTeacher.assignedClass } : t));
+        };
+        // Only update position if it's set
+        if ((newTeacher as any).position) {
+          updateData.position = (newTeacher as any).position;
+        } else {
+          // If position is not set (e.g., cleared), explicitly set to null/undefined to remove it
+          updateData.position = null;
+        }
+        await updateDoc(doc(db, 'users', editingTeacher.id), updateData);
+        setTeachers(prev => prev.map(t => t.id === editingTeacher.id ? { ...t, name: newTeacher.name, assignedClass: newTeacher.assignedClass, position: (newTeacher as any).position } : t));
         showToast('แก้ไขข้อมูลสำเร็จ', 'success');
 
         // Reset
@@ -1102,12 +1110,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       const secondaryAuth = getAuth(secondaryApp);
       try {
         const userCred = await createUserWithEmailAndPassword(secondaryAuth, `${cleanUsername}@school.local`, cleanPassword);
-        const newUser = {
+        const newUser: any = {
           name: newTeacher.name,
           username: cleanUsername,
           role: Role.TEACHER,
           assignedClass: newTeacher.assignedClass
         };
+        // Add position if set
+        if ((newTeacher as any).position) {
+          newUser.position = (newTeacher as any).position;
+        }
         await setDoc(doc(db, 'users', userCred.user.uid), newUser);
         await signOut(secondaryAuth); await (firebaseApp as any).deleteApp(secondaryApp);
 
@@ -1129,8 +1141,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       name: teacher.name,
       assignedClass: teacher.assignedClass || GRADE_OPTIONS[0],
       username: teacher.username,
-      password: '' // Password cannot be retrieved
-    });
+      password: '', // Password cannot be retrieved
+      position: teacher.position // Load existing position
+    } as any);
     // Scroll to top of form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1156,7 +1169,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 6, label: 'เวลาบันทึก', icon: Clock },
     { id: 7, label: 'ปฏิทิน', icon: CalendarDays },
     { id: 8, label: 'มอนิเตอร์', icon: Printer },
-    { id: 9, label: 'แจ้งเตือน', icon: Bell },
+    { id: 9, label: 'สถานะครู', icon: Activity },
     { id: 10, label: 'ตารางเวร', icon: ClipboardList },
   ];
 
@@ -1302,7 +1315,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 )}
               </div>
               <form onSubmit={handleTeacherSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs font-bold text-gray-700 mb-1 block">ชื่อ-นามสกุลครู</label>
                     <input type="text" placeholder="ชื่อ-นามสกุล" required className={INPUT_STYLE} value={newTeacher.name} onChange={e => setNewTeacher({ ...newTeacher, name: e.target.value })} />
@@ -1310,6 +1323,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   <div>
                     <label className="text-xs font-bold text-gray-700 mb-1 block">ครูประจำชั้น</label>
                     <select className={INPUT_STYLE} value={newTeacher.assignedClass} onChange={e => setNewTeacher({ ...newTeacher, assignedClass: e.target.value })}>{GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}</select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 mb-1 block">สถานะครู</label>
+                    <select
+                      className={INPUT_STYLE}
+                      value={(newTeacher as any).position || ''}
+                      onChange={e => setNewTeacher({ ...newTeacher, position: e.target.value || undefined } as any)}
+                    >
+                      <option value="">-- ยังไม่ได้เลือก --</option>
+                      <option value="assistant">ครูผู้ช่วย</option>
+                      <option value="permanent">ครูประจำการ</option>
+                    </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1349,12 +1374,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
               <div className="p-4 border-b border-gray-100 font-bold text-black">รายชื่อครูในระบบ</div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-4">ชื่อ</th><th className="p-4">ชั้น</th><th className="p-4">Username</th><th className="p-4 text-right">จัดการ</th></tr></thead>
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-4">ชื่อ</th><th className="p-4">ชั้น</th><th className="p-4">สถานะ</th><th className="p-4">Username</th><th className="p-4 text-right">จัดการ</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {teachers.map(t => (
                       <tr key={t.id} className={`hover:bg-gray-50 transition-colors ${editingTeacher?.id === t.id ? 'bg-blue-50' : ''}`}>
                         <td className="p-4 font-bold text-black">{t.name}</td>
                         <td className="p-4"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100">{t.assignedClass}</span></td>
+                        <td className="p-4">
+                          {t.position === 'assistant' && (
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">ผู้ช่วย</span>
+                          )}
+                          {t.position === 'permanent' && (
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">ประจำการ</span>
+                          )}
+                          {!t.position && (
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">ยังไม่ได้เลือก</span>
+                          )}
+                        </td>
                         <td className="p-4 text-gray-600 font-mono">{t.username}</td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <button onClick={() => clickEditTeacher(t)} className="text-brand-600 hover:bg-brand-50 p-2 rounded-lg transition-colors mr-1" title="แก้ไขข้อมูล"><Pencil className="w-4 h-4" /></button>
@@ -1487,6 +1523,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                     <tr>
                       <th className="px-4 py-3">ระดับชั้น</th>
                       <th className="px-4 py-3 text-center">สถานะ</th>
+                      <th className="px-4 py-3">ผู้บันทึก</th>
                       <th className="px-4 py-3 text-right">
                         <button
                           onClick={() => setSortByTime(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
@@ -1545,6 +1582,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                                   </span>
                                 )
                               })()}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {record.recordedBy || '-'}
                             </td>
                             <td className="px-4 py-3 text-right text-gray-600 font-mono">
                               {record.timestamp
@@ -1775,17 +1815,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                     </div>
                   </div>
 
-                  {/* Send Notification Button */}
-                  <button
-                    onClick={() => {
-                      fetchNotificationProfiles();
-                      setShowNotifyModal(true);
-                    }}
-                    className="w-full mt-4 bg-orange-500 text-white px-4 py-3 rounded-xl hover:bg-orange-600 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
-                  >
-                    <Bell className="w-5 h-5" />
-                    ส่งแจ้งเตือนห้องที่ยังไม่บันทึก
-                  </button>
                 </>
               )}
 
@@ -1804,77 +1833,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           </div>
         )}
 
-        {/* Notification Modal */}
-        {showNotifyModal && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
-              <h3 className="font-bold text-xl text-black flex items-center gap-2">
-                <Bell className="w-6 h-6 text-orange-500" />
-                ส่งแจ้งเตือนห้องที่ยังไม่บันทึก
-              </h3>
-
-              {/* Profile Selector */}
-              <div>
-                <label className="text-sm font-bold text-gray-700 block mb-2">เลือกกลุ่ม LINE</label>
-                {notificationProfiles.length > 0 ? (
-                  <select
-                    className={INPUT_STYLE}
-                    value={selectedProfileForNotify}
-                    onChange={e => setSelectedProfileForNotify(e.target.value)}
-                  >
-                    {notificationProfiles.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">
-                    ไม่พบกลุ่มที่ตั้งค่าไว้ กรุณาตั้งค่าในแท็บ "แจ้งเตือน" ก่อน
-                  </div>
-                )}
-              </div>
-
-              {/* Preview */}
-              <div>
-                <label className="text-sm font-bold text-gray-700 block mb-2">ห้องที่ยังไม่บันทึก</label>
-                <div className="bg-gray-50 rounded-xl p-4 max-h-48 overflow-y-auto text-sm space-y-1">
-                  {(() => {
-                    const summary = getUnrecordedSummary();
-                    if (summary.length === 0) {
-                      return <div className="text-emerald-600 font-medium">✅ ทุกห้องบันทึกครบแล้ว!</div>;
-                    }
-                    return summary.map(item => {
-                      const dateObj = new Date(item.date);
-                      const thaiDate = dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
-                      return (
-                        <div key={item.date} className="flex gap-2">
-                          <span className="text-gray-500">📅 {thaiDate}:</span>
-                          <span className="text-red-600 font-medium">{item.classes.join(', ')}</span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowNotifyModal(false)}
-                  className={`${BTN_SECONDARY} flex-1 py-2.5`}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  onClick={sendUnrecordedNotification}
-                  disabled={sendingNotification || notificationProfiles.length === 0 || getUnrecordedSummary().length === 0}
-                  className={`${BTN_PRIMARY} flex-1 py-2.5 bg-orange-500 hover:bg-orange-600`}
-                >
-                  {sendingNotification ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ส่งแจ้งเตือน'}
-                </button>
-              </div>
-            </div>
-          </div>
-          , document.body)}
         {activeTab === 7 && (
           <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
             <div className={`bg-white p-6 rounded-2xl border shadow-md transition-all ${editingEventId ? 'border-brand-300 ring-2 ring-brand-100' : 'border-gray-200'}`}>
@@ -2355,17 +2313,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                     </div>
                   </div>
 
-                  {/* Send Notification Button */}
-                  <button
-                    onClick={() => {
-                      fetchNotificationProfiles();
-                      setShowPrintNotifyModal(true);
-                    }}
-                    className="w-full mt-4 bg-orange-500 text-white px-4 py-3 rounded-xl hover:bg-orange-600 font-medium shadow-sm hover:shadow-md transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
-                  >
-                    <Bell className="w-5 h-5" />
-                    ส่งแจ้งเตือนวันที่ยังไม่พิมพ์
-                  </button>
                 </>
               )}
 
@@ -2384,79 +2331,113 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           </div>
         )}
 
-        {/* Print Notification Modal */}
-        {showPrintNotifyModal && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
-              <h3 className="font-bold text-xl text-black flex items-center gap-2">
-                <Bell className="w-6 h-6 text-orange-500" />
-                ส่งแจ้งเตือนวันที่ยังไม่พิมพ์รายงาน
-              </h3>
+        {/* Tab 9: Teacher Status (RPG Style) */}
+        {activeTab === 9 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 rounded-2xl shadow-lg text-white">
+              <h2 className="text-xl font-bold flex items-center gap-3">
+                <Activity className="w-6 h-6" />
+                สถานะครู - Character Status
+              </h2>
+              <p className="text-purple-200 text-sm mt-1">ดูสถานะการทำงานของครูแต่ละคนแบบ RPG</p>
+            </div>
 
-              {/* Profile Selector */}
-              <div>
-                <label className="text-sm font-bold text-gray-700 block mb-2">เลือกกลุ่ม LINE</label>
-                {notificationProfiles.length > 0 ? (
+            {loadingTeacherStatus ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-10 h-10 animate-spin text-purple-600" />
+              </div>
+            ) : teacherStatuses.length === 0 ? (
+              <div className="bg-white p-8 rounded-2xl border border-gray-200 text-center text-gray-500">
+                <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>ไม่พบข้อมูลครู กรุณาเพิ่มครูในระบบก่อน</p>
+              </div>
+            ) : (
+              <>
+                {/* Sort Dropdown */}
+                <div className="flex items-center justify-end gap-2 mb-4">
+                  <span className="text-sm text-gray-600">เรียงตาม:</span>
                   <select
-                    className={INPUT_STYLE}
-                    value={selectedProfileForNotify}
-                    onChange={e => setSelectedProfileForNotify(e.target.value)}
+                    value={teacherStatusSort}
+                    onChange={(e) => setTeacherStatusSort(e.target.value as typeof teacherStatusSort)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
                   >
-                    {notificationProfiles.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                    <option value="name">ชื่อ (ก-ฮ)</option>
+                    <option value="position">สถานะ (ประจำการ/ผู้ช่วย)</option>
+                    <option value="level">Level (สูง→ต่ำ)</option>
+                    <option value="status">งานค้าง (มาก→น้อย)</option>
                   </select>
-                ) : (
-                  <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">
-                    ไม่พบกลุ่มที่ตั้งค่าไว้ กรุณาตั้งค่าในแท็บ "แจ้งเตือน" ก่อน
-                  </div>
-                )}
-              </div>
-
-              {/* Preview */}
-              <div>
-                <label className="text-sm font-bold text-gray-700 block mb-2">วันที่ยังไม่พิมพ์</label>
-                <div className="bg-gray-50 rounded-xl p-4 max-h-48 overflow-y-auto text-sm space-y-1">
-                  {(() => {
-                    const unprintedDates = getUnprintedSummary();
-                    if (unprintedDates.length === 0) {
-                      return <div className="text-emerald-600 font-medium">✅ ทุกวันพิมพ์รายงานครบแล้ว!</div>;
-                    }
-                    return unprintedDates.map(dateStr => {
-                      const dateObj = new Date(dateStr);
-                      const thaiDate = dateObj.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' });
-                      return (
-                        <div key={dateStr} className="text-amber-600 font-medium">
-                          📅 {thaiDate}
-                        </div>
-                      );
-                    });
-                  })()}
                 </div>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...teacherStatuses]
+                    .sort((a, b) => {
+                      switch (teacherStatusSort) {
+                        case 'name':
+                          return a.teacher.name.localeCompare(b.teacher.name, 'th');
+                        case 'position':
+                          // Permanent first, then assistant, then undefined
+                          const posOrder = { permanent: 0, assistant: 1, undefined: 2 };
+                          const aPos = a.teacher.position ?? 'undefined';
+                          const bPos = b.teacher.position ?? 'undefined';
+                          return (posOrder[aPos as keyof typeof posOrder] ?? 2) - (posOrder[bPos as keyof typeof posOrder] ?? 2);
+                        case 'level':
+                          // Calculate level from percentage for sorting
+                          const getLevel = (s: typeof a) => {
+                            const attPct = s.attendanceStats.totalWorkDays > 0
+                              ? (s.attendanceStats.recordedDays / s.attendanceStats.totalWorkDays) * 100
+                              : 0;
+                            const printPct = s.printStats.totalDutyDays > 0
+                              ? (s.printStats.printedDays / s.printStats.totalDutyDays) * 100
+                              : 100;
+                            return Math.floor((attPct + printPct) / 2 / 10);
+                          };
+                          return getLevel(b) - getLevel(a);
+                        case 'status':
+                          // More missing items first
+                          const aMissing = (a.attendanceStats.totalWorkDays - a.attendanceStats.recordedDays) + a.printStats.missingPrintDays.length;
+                          const bMissing = (b.attendanceStats.totalWorkDays - b.attendanceStats.recordedDays) + b.printStats.missingPrintDays.length;
+                          return bMissing - aMissing;
+                        default:
+                          return 0;
+                      }
+                    })
+                    .map(status => (
+                      <TeacherStatusCard
+                        key={status.teacher.id}
+                        teacher={status.teacher}
+                        dutyDays={status.dutyDays}
+                        attendanceStats={status.attendanceStats}
+                        printStats={status.printStats}
+                        isTodayDuty={status.isTodayDuty}
+                      />
+                    ))}
+                </div>
+              </>
+            )}
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowPrintNotifyModal(false)}
-                  className={`${BTN_SECONDARY} flex-1 py-2.5`}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  onClick={sendUnprintedNotification}
-                  disabled={sendingNotification || notificationProfiles.length === 0 || getUnprintedSummary().length === 0}
-                  className={`${BTN_PRIMARY} flex-1 py-2.5 bg-orange-500 hover:bg-orange-600`}
-                >
-                  {sendingNotification ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ส่งแจ้งเตือน'}
-                </button>
+            {/* Legend */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+              <h3 className="font-bold text-sm text-gray-700 mb-3">📖 คำอธิบายสถานะ</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                  <span className="text-gray-600">สมบูรณ์ / ปกติ</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                  <span className="text-gray-600">มีงานค้าง 1-2 รายการ</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></div>
+                  <span className="text-gray-600">วิกฤต! มีงานค้างมาก</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-orange-500">🔥</span>
+                  <span className="text-gray-600">เวรวันนี้</span>
+                </div>
               </div>
             </div>
           </div>
-          , document.body)}
-
-        {/* Tab 9: Notification Settings */}
-        {activeTab === 9 && <NotificationSettingsPanel />}
+        )}
 
         {/* Tab 10: Duty Schedule */}
         {activeTab === 10 && (
