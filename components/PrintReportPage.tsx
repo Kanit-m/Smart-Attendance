@@ -185,6 +185,9 @@ export const PrintReportPage: React.FC = () => {
                 printedBy,
                 role
             });
+            // Notify other windows (TeacherPanel) about the print via localStorage event
+            localStorage.setItem('print_success_date', date);
+            localStorage.setItem('print_success_time', Date.now().toString());
         } catch (err) {
             console.error('Failed to log print action:', err);
         }

@@ -13,7 +13,7 @@ import {
 import * as firebaseApp from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, firebaseConfig } from '../firebase';
-import { Student, TeacherForm, Gender, Role, AppUser, StudentStatus, SchoolActivity, DutySchedule } from '../types';
+import { Student, TeacherForm, Gender, Role, AppUser, StudentStatus } from '../types';
 import { mapStudentData } from '../utils';
 import { Dashboard } from './Dashboard';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -646,7 +646,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         // Find which days this teacher is on duty
         const teacherDutyDays: string[] = [];
         Object.entries(dutySchedule).forEach(([day, teachersList]) => {
-          if (teachersList.some(t => t.trim().toLowerCase() === teacher.name.trim().toLowerCase())) {
+          if ((teachersList as string[]).some(t => t.trim().toLowerCase() === teacher.name.trim().toLowerCase())) {
             teacherDutyDays.push(day);
           }
         });

@@ -456,6 +456,22 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         calculateMissingPrintDays();
     }, [effectiveTeacherName, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
 
+    // Listen for print success events from other windows (PrintReportPage)
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'print_success_time' && e.newValue) {
+                // A print was just recorded - get the date and remove it from myMissingPrintDays
+                const printedDate = localStorage.getItem('print_success_date');
+                if (printedDate) {
+                    setMyMissingPrintDays(prev => prev.filter(d => d !== printedDate));
+                }
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
+
     // Check if today is my duty day and load all classes recording status
     useEffect(() => {
         if (!effectiveTeacherName || !dutyScheduleLoaded || !holidaysLoaded) return;
@@ -623,6 +639,13 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             // Invalidate missing days cache to refresh the banner
             sessionStorage.removeItem(`missing_days_${selectedClass}`);
             sessionStorage.removeItem(`missing_days_time_${selectedClass}`);
+
+            // Immediately update missingDates state to remove the saved date
+            // This ensures UI updates without requiring a reload
+            if (selectedClass === currentUser.assignedClass) {
+                setMissingDates(prev => prev.filter(d => d !== selectedDate));
+                setPastMissingDates(prev => prev.filter(d => d !== selectedDate));
+            }
 
             setShowConfirmModal(false);
             setInitialAttendanceState(attendanceState); // Reset to mark as saved
