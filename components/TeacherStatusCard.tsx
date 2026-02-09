@@ -1,7 +1,7 @@
 import React from 'react';
-import { User, Calendar, Printer, ClipboardCheck, Flame, Moon, AlertTriangle, CheckCircle, XCircle, Zap, TrendingUp } from 'lucide-react';
+import { User, Calendar, Printer, ClipboardCheck, Flame, Moon, AlertTriangle, CheckCircle, XCircle, Zap, TrendingUp, Star } from 'lucide-react';
 import { AppUser, TeacherXP } from '../types';
-import { getXpProgress, getLevelTitle } from '../utils/xpCalculator';
+import { getXpProgress, getLevelTitle, getLevelColor, calculateLevel, MAX_LEVEL } from '../utils/xpCalculator';
 
 interface TeacherStatusCardProps {
   teacher: AppUser;
@@ -44,6 +44,9 @@ export const TeacherStatusCard: React.FC<TeacherStatusCardProps> = ({
   isTodayDuty,
   xpData
 }) => {
+  // Check if teacher is assistant (support role - doesn't earn XP)
+  const isAssistant = teacher.position === 'assistant';
+
   // Calculate status level from XP if available, otherwise use percentage-based
   const attendancePercent = attendanceStats.totalWorkDays > 0
     ? Math.round((attendanceStats.recordedDays / attendanceStats.totalWorkDays) * 100)
@@ -52,9 +55,16 @@ export const TeacherStatusCard: React.FC<TeacherStatusCardProps> = ({
     ? Math.round((printStats.printedDays / printStats.totalDutyDays) * 100)
     : 100; // If no duty days, consider 100%
 
-  // Use XP-based level if available, otherwise start at Level 0
-  const level = xpData?.level ?? 0;
-  const xpProgress = xpData ? getXpProgress(xpData.totalXp) : null;
+  // Calculate XP only for non-assistant teachers
+  // Formula: attendance_normal (5 XP per day) + print_duty (15 XP per duty day)
+  const calculatedXp = isAssistant ? 0 : (xpData?.totalXp ?? (
+    (attendanceStats.recordedDays * 5) + (printStats.printedDays * 15)
+  ));
+
+  // Calculate level from XP (starts at Level 1, assistants stay at 1)
+  const level = isAssistant ? 1 : (xpData?.level ?? calculateLevel(calculatedXp));
+  const xpProgress = getXpProgress(calculatedXp);
+  const levelColor = isAssistant ? 'from-amber-400 to-orange-400' : getLevelColor(level);
 
   // Determine status effect
   type StatusEffect = 'healthy' | 'warning' | 'critical' | 'perfect';
@@ -136,18 +146,26 @@ export const TeacherStatusCard: React.FC<TeacherStatusCardProps> = ({
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <div className={`px-2 py-1 rounded-lg bg-gradient-to-r ${statusColor} text-white text-xs font-bold shadow-sm`}>
-              Lv.{level}
-            </div>
-            {/* XP Display */}
-            {xpData && (
+            {/* Level Badge with dynamic color */}
+            {isAssistant ? (
+              <div className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-orange-400 text-white text-xs font-bold shadow-md flex items-center gap-1">
+                🛡️ Support
+              </div>
+            ) : (
+              <div className={`px-2.5 py-1 rounded-lg bg-gradient-to-r ${levelColor} text-white text-xs font-bold shadow-md flex items-center gap-1`}>
+                {level >= 99 && <Star className="w-3 h-3" />}
+                Lv.{level}
+              </div>
+            )}
+            {/* XP Display - Only for non-assistants */}
+            {!isAssistant && (
               <div className="flex items-center gap-1 text-purple-600 text-[10px] font-bold">
                 <Zap className="w-3 h-3" />
-                {xpData.totalXp.toLocaleString()} XP
+                {calculatedXp.toLocaleString()} XP
               </div>
             )}
             {/* Streak Display */}
-            {xpData && xpData.currentStreak > 0 && (
+            {xpData && xpData.currentStreak > 0 && !isAssistant && (
               <div className="flex items-center gap-1 text-orange-500 text-[10px] font-bold">
                 <TrendingUp className="w-3 h-3" />
                 {xpData.currentStreak} วันต่อเนื่อง
@@ -161,23 +179,48 @@ export const TeacherStatusCard: React.FC<TeacherStatusCardProps> = ({
           </div>
         </div>
 
-        {/* XP Progress Bar (if XP data available) */}
-        {xpProgress && (
+        {/* XP Progress Bar - Only for non-assistant teachers */}
+        {isAssistant ? (
+          <div className="mb-4 p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+            <div className="flex items-center gap-2 text-amber-700">
+              <span className="text-lg">🛡️</span>
+              <div>
+                <p className="text-xs font-bold">Support Role</p>
+                <p className="text-[10px] text-amber-600">XP จากการทำงานไปให้ครูเวร/ครูประจำชั้น</p>
+              </div>
+            </div>
+          </div>
+        ) : (
           <div className="mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-purple-600">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className={`text-xs font-bold bg-gradient-to-r ${levelColor} bg-clip-text text-transparent`}>
                 {getLevelTitle(level)}
               </span>
               <span className="text-[10px] text-gray-400">
-                {xpProgress.progress} / {xpProgress.nextLevelXp - xpProgress.currentLevelXp} XP
+                {xpProgress.isMaxLevel ? (
+                  <span className="text-amber-500 font-bold">✨ MAX LEVEL!</span>
+                ) : (
+                  `${xpProgress.progress} / ${xpProgress.nextLevelXp - xpProgress.currentLevelXp} XP`
+                )}
               </span>
             </div>
-            <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
+            <div className="h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
               <div
-                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+                className={`h-full bg-gradient-to-r ${levelColor} rounded-full transition-all duration-700 ease-out relative`}
                 style={{ width: `${xpProgress.percent}%` }}
-              />
+              >
+                {/* Shine effect for high levels */}
+                {level >= 50 && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+                )}
+              </div>
             </div>
+            {/* Next level hint */}
+            {!xpProgress.isMaxLevel && level < 99 && (
+              <div className="text-[9px] text-gray-400 mt-1 text-right">
+                อีก {xpProgress.nextLevelXp - xpProgress.currentLevelXp - xpProgress.progress} XP → Lv.{level + 1}
+              </div>
+            )}
           </div>
         )}
 

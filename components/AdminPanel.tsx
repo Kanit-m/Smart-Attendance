@@ -1516,6 +1516,83 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 </button>
               </div>
 
+              {/* Weekend Warning with Delete Option */}
+              {(() => {
+                const selectedDateObj = new Date(recordTimesDate + 'T00:00:00');
+                const dayOfWeek = selectedDateObj.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const hasRecords = attendanceRecords.some(r => r.timestamp !== null);
+
+                if (isWeekend) {
+                  return (
+                    <div className={`mb-6 p-4 rounded-xl border-2 ${hasRecords ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-200'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${hasRecords ? 'bg-red-100' : 'bg-orange-100'}`}>
+                            <Sun className={`w-5 h-5 ${hasRecords ? 'text-red-600' : 'text-orange-600'}`} />
+                          </div>
+                          <div>
+                            <h4 className={`font-bold ${hasRecords ? 'text-red-800' : 'text-orange-800'}`}>
+                              {dayOfWeek === 0 ? '🎉 วันอาทิตย์' : '🎉 วันเสาร์'}
+                            </h4>
+                            <p className={`text-sm ${hasRecords ? 'text-red-600' : 'text-orange-600'}`}>
+                              {hasRecords
+                                ? '⚠️ พบข้อมูลเช็คชื่อในวันหยุด! ควรลบออก'
+                                : 'วันหยุดสุดสัปดาห์ - ไม่มีการเช็คชื่อ'}
+                            </p>
+                          </div>
+                        </div>
+                        {hasRecords && (
+                          <button
+                            onClick={() => {
+                              const recordCount = attendanceRecords.filter(r => r.timestamp !== null).length;
+                              setConfirmModal({
+                                isOpen: true,
+                                title: '⚠️ ลบข้อมูลวันหยุด',
+                                message: `ยืนยันลบข้อมูลเช็คชื่อวันที่ ${selectedDateObj.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}? (${recordCount} ห้องเรียน)`,
+                                isDangerous: true,
+                                action: async () => {
+                                  setLoadingAction(true);
+                                  try {
+                                    // Query all attendance records for this weekend date
+                                    const q = query(collection(db, 'attendance'), where('date', '==', recordTimesDate));
+                                    const snapshot = await getDocs(q);
+
+                                    if (!snapshot.empty) {
+                                      // Delete all in batch
+                                      const batch = writeBatch(db);
+                                      snapshot.docs.forEach(d => {
+                                        batch.delete(doc(db, 'attendance', d.id));
+                                      });
+                                      await batch.commit();
+
+                                      showToast(`ลบข้อมูล ${snapshot.docs.length} รายการเรียบร้อย`, 'success');
+                                      // Refresh the data
+                                      fetchAttendanceRecordTimes();
+                                    }
+                                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                  } catch (e) {
+                                    console.error(e);
+                                    showToast('เกิดข้อผิดพลาดในการลบ', 'error');
+                                  } finally {
+                                    setLoadingAction(false);
+                                  }
+                                }
+                              });
+                            }}
+                            className={`${BTN_DANGER} flex items-center justify-center gap-2 w-full sm:w-auto`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            ลบข้อมูล
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               {/* Results Table */}
               <div className="overflow-x-auto border border-gray-200 rounded-xl">
                 <table className="w-full text-sm text-left text-black">

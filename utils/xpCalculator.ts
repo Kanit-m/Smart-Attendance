@@ -11,29 +11,34 @@ export const XP_VALUES: Record<XPAction, number> = {
     bonus_month: 200          // Perfect Month
 };
 
+// Max level cap (Ragnarok style!)
+export const MAX_LEVEL = 99;
+
 /**
  * Calculate level from total XP
- * Formula: Level = floor(sqrt(XP / 100))
- * Starts at Level 0 when XP = 0
+ * Formula: Level = floor(sqrt(XP / 4)), capped at 99
+ * ~40,000 XP to reach level 99 (3-5 years of consistent work)
  */
 export function calculateLevel(xp: number): number {
-    if (xp <= 0) return 0;
-    return Math.floor(Math.sqrt(xp / 100));
+    if (xp <= 0) return 1; // Start at Level 1 like RO
+    const level = Math.floor(Math.sqrt(xp / 4));
+    return Math.min(MAX_LEVEL, Math.max(1, level));
 }
 
 /**
  * Get total XP required to reach a specific level
- * Formula: XP = level^2 * 100
+ * Formula: XP = level^2 * 4
  */
 export function getXpForLevel(level: number): number {
-    if (level <= 0) return 0;
-    return Math.pow(level, 2) * 100;
+    if (level <= 1) return 0;
+    return Math.pow(level, 2) * 4;
 }
 
 /**
  * Get XP required for next level
  */
 export function getXpForNextLevel(currentLevel: number): number {
+    if (currentLevel >= MAX_LEVEL) return getXpForLevel(MAX_LEVEL);
     return getXpForLevel(currentLevel + 1);
 }
 
@@ -45,19 +50,22 @@ export function getXpProgress(xp: number): {
     nextLevelXp: number;
     progress: number;
     percent: number;
+    isMaxLevel: boolean;
 } {
     const level = calculateLevel(xp);
+    const isMaxLevel = level >= MAX_LEVEL;
     const currentLevelXp = getXpForLevel(level);
-    const nextLevelXp = getXpForLevel(level + 1);
+    const nextLevelXp = isMaxLevel ? getXpForLevel(MAX_LEVEL) : getXpForLevel(level + 1);
     const progress = xp - currentLevelXp;
     const required = nextLevelXp - currentLevelXp;
-    const percent = required > 0 ? Math.round((progress / required) * 100) : 100;
+    const percent = isMaxLevel ? 100 : (required > 0 ? Math.round((progress / required) * 100) : 100);
 
     return {
         currentLevelXp,
         nextLevelXp,
         progress,
-        percent
+        percent,
+        isMaxLevel
     };
 }
 
@@ -131,7 +139,7 @@ export function createEmptyTeacherXP(teacherId: string, teacherName: string): Te
         teacherId,
         teacherName,
         totalXp: 0,
-        level: 0,  // Start at Level 0
+        level: 1,  // Start at Level 1 like RO
         currentStreak: 0,
         longestStreak: 0,
         lastActionDate: '',
@@ -148,14 +156,35 @@ export function limitXpHistory(history: XPHistoryEntry[]): XPHistoryEntry[] {
 }
 
 /**
- * Get level title/rank
+ * Get level title/rank (Ragnarok Online inspired!)
  */
 export function getLevelTitle(level: number): string {
-    if (level >= 10) return '🏆 ตำนาน';
-    if (level >= 8) return '⭐ ผู้เชี่ยวชาญ';
-    if (level >= 6) return '🎯 มืออาชีพ';
-    if (level >= 4) return '📈 ก้าวหน้า';
-    if (level >= 2) return '🌱 เริ่มต้น';
-    if (level >= 1) return '🆕 มือใหม่';
-    return '👤 ยังไม่มี XP';
+    if (level >= 99) return '👑 ตำนานแห่งโรงเรียน';
+    if (level >= 90) return '🌟 Transcendent';
+    if (level >= 80) return '⚔️ High Master';
+    if (level >= 70) return '🏆 Master';
+    if (level >= 60) return '💎 Expert';
+    if (level >= 50) return '⭐ Veteran';
+    if (level >= 40) return '🎯 Professional';
+    if (level >= 30) return '📈 Advanced';
+    if (level >= 20) return '🌱 Intermediate';
+    if (level >= 10) return '🆕 Beginner';
+    return '👤 Novice';
+}
+
+/**
+ * Get level color gradient based on level
+ */
+export function getLevelColor(level: number): string {
+    if (level >= 99) return 'from-yellow-400 via-amber-500 to-orange-500'; // Legendary gold
+    if (level >= 90) return 'from-purple-500 via-pink-500 to-rose-500';    // Transcendent
+    if (level >= 80) return 'from-red-500 to-rose-600';                     // High Master
+    if (level >= 70) return 'from-orange-500 to-amber-500';                 // Master
+    if (level >= 60) return 'from-cyan-500 to-blue-500';                    // Expert
+    if (level >= 50) return 'from-emerald-500 to-teal-500';                 // Veteran
+    if (level >= 40) return 'from-blue-500 to-indigo-500';                  // Professional
+    if (level >= 30) return 'from-violet-500 to-purple-500';                // Advanced
+    if (level >= 20) return 'from-green-500 to-emerald-500';                // Intermediate
+    if (level >= 10) return 'from-sky-500 to-blue-500';                     // Beginner
+    return 'from-gray-400 to-gray-500';                                      // Novice
 }

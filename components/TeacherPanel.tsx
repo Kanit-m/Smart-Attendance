@@ -609,6 +609,15 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     };
 
     const confirmSave = async () => {
+        // Prevent saving on weekends
+        const selectedDateObj = new Date(selectedDate);
+        const dayOfWeek = selectedDateObj.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            alert('ไม่สามารถบันทึกเช็คชื่อในวันเสาร์-อาทิตย์ได้');
+            setShowConfirmModal(false);
+            return;
+        }
+
         setSaving(true);
         try {
             const batch = writeBatch(db);
