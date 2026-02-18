@@ -97,6 +97,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [myMissingPrintDays, setMyMissingPrintDays] = useState<string[]>([]);
     const [showMissingPrintModal, setShowMissingPrintModal] = useState(false);
     const [printCloseVisible, setPrintCloseVisible] = useState(false);
+    const [hasCheckedPrintReminder, setHasCheckedPrintReminder] = useState(false);
     const [showPrintPopover, setShowPrintPopover] = useState(false);
     const [dutyScheduleLoaded, setDutyScheduleLoaded] = useState(false);
 
@@ -464,6 +465,23 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
         calculateMissingPrintDays();
     }, [effectiveTeacherName, dutySchedule, dutyScheduleLoaded, holidays, holidaysLoaded]);
+
+    // Auto-open wizard at Step 2 (print) if no attendance reminder was needed
+    useEffect(() => {
+        if (
+            !hasCheckedPrintReminder &&
+            hasCheckedReminder &&           // attendance check is done
+            pastMissingDates.length === 0 && // no attendance to remind
+            !showAttendanceReminder &&       // wizard isn't already open
+            myMissingPrintDays.length > 0    // but there are missing print days
+        ) {
+            setHasCheckedPrintReminder(true);
+            setShowAttendanceReminder(true);
+            setReminderStep(2);
+            setReminderSkipVisible(false);
+            setTimeout(() => setReminderSkipVisible(true), 2000);
+        }
+    }, [hasCheckedPrintReminder, hasCheckedReminder, pastMissingDates, showAttendanceReminder, myMissingPrintDays]);
 
     // Listen for print success events from other windows (PrintReportPage)
     useEffect(() => {
