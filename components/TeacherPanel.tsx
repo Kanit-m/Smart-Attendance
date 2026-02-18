@@ -83,7 +83,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [showAttendanceReminder, setShowAttendanceReminder] = useState(false);
     const [hasCheckedReminder, setHasCheckedReminder] = useState(false);
     const [pastMissingDates, setPastMissingDates] = useState<string[]>([]); // Excludes today
-    const [reminderCloseVisible, setReminderCloseVisible] = useState(false);
+    const [reminderStep, setReminderStep] = useState<1 | 2>(1); // 1 = attendance, 2 = print
+    const [reminderSkipVisible, setReminderSkipVisible] = useState(false);
 
     // Missing Days Badge State (includes today)
     const [missingDates, setMissingDates] = useState<string[]>([]);
@@ -268,8 +269,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
                             if (!hasCheckedReminder && pastMissing.length > 0) {
                                 setShowAttendanceReminder(true);
-                                setReminderCloseVisible(false);
-                                setTimeout(() => setReminderCloseVisible(true), 2000);
+                                setReminderStep(1);
+                                setReminderSkipVisible(false);
+                                setTimeout(() => setReminderSkipVisible(true), 2000);
                             }
                             setHasCheckedReminder(true);
                             return; // Use cache, skip Firestore query
@@ -343,8 +345,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 // Show reminder popup if there are past missing days
                 if (!hasCheckedReminder && pastMissing.length > 0) {
                     setShowAttendanceReminder(true);
-                    setReminderCloseVisible(false);
-                    setTimeout(() => setReminderCloseVisible(true), 2000);
+                    setReminderStep(1);
+                    setReminderSkipVisible(false);
+                    setTimeout(() => setReminderSkipVisible(true), 2000);
                 }
                 setHasCheckedReminder(true);
             } catch (err) {
@@ -1573,88 +1576,198 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 isLoading={loading}
             />
 
-            {/* --- ATTENDANCE REMINDER MODAL (Past Missing Days) --- */}
-            {showAttendanceReminder && pastMissingDates.length > 0 && (
+            {/* --- UNIFIED REMINDER MODAL (2-Step Wizard) --- */}
+            {showAttendanceReminder && (pastMissingDates.length > 0 || myMissingPrintDays.length > 0) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
-                        {/* Header - RED warning */}
-                        <div className="bg-gradient-to-r from-red-500 to-rose-500 px-6 py-5 text-white">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-white/20 p-3 rounded-full animate-pulse">
-                                    <AlertTriangle className="w-8 h-8" />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold">⚠️ มีวันที่ยังไม่ได้บันทึก!</h3>
-                                    <p className="text-sm text-white/90 mt-0.5">กรุณาบันทึกย้อนหลัง {pastMissingDates.length} วัน</p>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Body - List of missing dates */}
-                        <div className="px-4 py-4 max-h-[300px] overflow-y-auto">
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-                                <p className="text-sm text-amber-700 font-medium">
-                                    👆 เลือกวันที่ต้องการบันทึก แล้วระบบจะพาไปหน้าเช็คชื่อให้
-                                </p>
-                            </div>
-                            <div className="space-y-2">
-                                {pastMissingDates.map(dateStr => {
-                                    const [y, m, d] = dateStr.split('-').map(Number);
-                                    const date = new Date(y, m - 1, d);
-                                    const formatted = date.toLocaleDateString('th-TH', {
-                                        weekday: 'long',
-                                        day: 'numeric',
-                                        month: 'long'
-                                    });
-                                    return (
+                        {/* === STEP 1: Missing Attendance Days === */}
+                        {reminderStep === 1 && pastMissingDates.length > 0 && (
+                            <>
+                                {/* Header - RED warning */}
+                                <div className="bg-gradient-to-r from-red-500 to-rose-500 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white/20 p-3 rounded-full animate-pulse">
+                                            <AlertTriangle className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold">⚠️ มีวันที่ยังไม่ได้บันทึก!</h3>
+                                            <p className="text-sm text-white/90 mt-0.5">กรุณาบันทึกย้อนหลัง {pastMissingDates.length} วัน</p>
+                                        </div>
+                                    </div>
+                                    {/* Step indicator */}
+                                    {myMissingPrintDays.length > 0 && (
+                                        <div className="flex items-center gap-2 mt-3 justify-center">
+                                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                                            <div className="w-2 h-2 rounded-full bg-white/40"></div>
+                                            <span className="text-xs text-white/70 ml-1">1/2</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Body - List of missing dates */}
+                                <div className="px-4 py-4 max-h-[300px] overflow-y-auto">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                                        <p className="text-sm text-amber-700 font-medium">
+                                            👆 เลือกวันที่ต้องการบันทึก แล้วระบบจะพาไปหน้าเช็คชื่อให้
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {pastMissingDates.map(dateStr => {
+                                            const [y, m, d] = dateStr.split('-').map(Number);
+                                            const date = new Date(y, m - 1, d);
+                                            const formatted = date.toLocaleDateString('th-TH', {
+                                                weekday: 'long',
+                                                day: 'numeric',
+                                                month: 'long'
+                                            });
+                                            return (
+                                                <button
+                                                    key={dateStr}
+                                                    onClick={() => {
+                                                        setSelectedDate(dateStr);
+                                                        setCurrentView('check');
+                                                        setShowAttendanceReminder(false);
+                                                    }}
+                                                    className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 border border-red-100 rounded-xl transition-all group"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-2 h-2 bg-red-500 rounded-full" />
+                                                        <span className="text-sm font-medium text-gray-700">{formatted}</span>
+                                                    </div>
+                                                    <span className="text-xs font-bold text-red-600 group-hover:text-red-700">
+                                                        บันทึกเลย →
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Footer */}
+                                <div className="px-4 pb-4 space-y-3">
+                                    <button
+                                        onClick={() => {
+                                            setSelectedDate(pastMissingDates[0]);
+                                            setCurrentView('check');
+                                            setShowAttendanceReminder(false);
+                                        }}
+                                        className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+                                    >
+                                        📝 ไปบันทึกย้อนหลังเลย
+                                    </button>
+                                    {reminderSkipVisible ? (
                                         <button
-                                            key={dateStr}
                                             onClick={() => {
-                                                setSelectedDate(dateStr);
-                                                setCurrentView('check');
-                                                setShowAttendanceReminder(false);
+                                                if (myMissingPrintDays.length > 0) {
+                                                    setReminderStep(2);
+                                                    setReminderSkipVisible(false);
+                                                    setTimeout(() => setReminderSkipVisible(true), 2000);
+                                                } else {
+                                                    setShowAttendanceReminder(false);
+                                                }
                                             }}
-                                            className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 border border-red-100 rounded-xl transition-all group"
+                                            className="w-full text-center text-xs text-gray-400 hover:text-gray-500 transition-colors py-1"
                                         >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-2 h-2 bg-red-500 rounded-full" />
-                                                <span className="text-sm font-medium text-gray-700">{formatted}</span>
-                                            </div>
-                                            <span className="text-xs font-bold text-red-600 group-hover:text-red-700">
-                                                บันทึกเลย →
-                                            </span>
+                                            {myMissingPrintDays.length > 0 ? 'ข้ามไปก่อน →' : 'ข้ามไปก่อน'}
                                         </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                                    ) : (
+                                        <div className="h-6" />
+                                    )}
+                                </div>
+                            </>
+                        )}
 
-                        {/* Footer - Big CTA + tiny delayed skip link */}
-                        <div className="px-4 pb-4 space-y-3">
-                            {/* ปุ่ม CTA หลัก — สีแดงเด่น พาไปวันแรกที่ขาด */}
-                            <button
-                                onClick={() => {
-                                    setSelectedDate(pastMissingDates[0]);
-                                    setCurrentView('check');
-                                    setShowAttendanceReminder(false);
-                                }}
-                                className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
-                            >
-                                📝 ไปบันทึกย้อนหลังเลย
-                            </button>
+                        {/* === STEP 2: Missing Print Days === */}
+                        {(reminderStep === 2 || (reminderStep === 1 && pastMissingDates.length === 0)) && myMissingPrintDays.length > 0 && (
+                            <>
+                                {/* Header */}
+                                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white/20 p-3 rounded-full animate-pulse">
+                                            <Printer className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold">🖨️ วันที่ยังไม่ได้พิมพ์!</h3>
+                                            <p className="text-sm text-white/90 mt-0.5">กรุณาพิมพ์ย้อนหลัง {myMissingPrintDays.length} วัน</p>
+                                        </div>
+                                    </div>
+                                    {/* Step indicator */}
+                                    {pastMissingDates.length > 0 && (
+                                        <div className="flex items-center gap-2 mt-3 justify-center">
+                                            <div className="w-2 h-2 rounded-full bg-white/40"></div>
+                                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                                            <span className="text-xs text-white/70 ml-1">2/2</span>
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* ลิงก์ "ข้ามไปก่อน" เล็กๆ จาง — แสดงหลัง delay 2 วิ */}
-                            {reminderCloseVisible ? (
-                                <button
-                                    onClick={() => setShowAttendanceReminder(false)}
-                                    className="w-full text-center text-xs text-gray-400 hover:text-gray-500 transition-colors py-1"
-                                >
-                                    ข้ามไปก่อน
-                                </button>
-                            ) : (
-                                <div className="h-6" />
-                            )}
-                        </div>
+                                {/* Body */}
+                                <div className="px-4 py-4 max-h-[300px] overflow-y-auto">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                                        <p className="text-sm text-amber-700 font-medium">
+                                            👆 เลือกวันที่ต้องการพิมพ์ แล้วระบบจะพาไปหน้าพิมพ์ให้
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {myMissingPrintDays.map(dateStr => {
+                                            const [y, m, d] = dateStr.split('-').map(Number);
+                                            const date = new Date(y, m - 1, d);
+                                            const formatted = date.toLocaleDateString('th-TH', {
+                                                weekday: 'short',
+                                                day: 'numeric',
+                                                month: 'short'
+                                            });
+                                            return (
+                                                <button
+                                                    key={dateStr}
+                                                    onClick={() => {
+                                                        setShowAttendanceReminder(false);
+                                                        window.open(`/print-report?date=${dateStr}`, '_blank');
+                                                    }}
+                                                    className="w-full flex items-center justify-between p-4 bg-orange-50 hover:bg-orange-100 border border-orange-100 rounded-xl transition-all group"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+                                                        <span className="font-bold text-gray-700">{formatted}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs text-orange-500">❌ ยังไม่พิมพ์</span>
+                                                        <span className="text-sm font-bold text-white bg-orange-500 px-3 py-1 rounded-full group-hover:bg-orange-600 transition-colors">
+                                                            พิมพ์ →
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Footer */}
+                                <div className="px-4 pb-4 space-y-3">
+                                    <button
+                                        onClick={() => {
+                                            setShowAttendanceReminder(false);
+                                            window.open(`/print-report?date=${myMissingPrintDays[0]}`, '_blank');
+                                        }}
+                                        className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+                                    >
+                                        🖨️ ไปพิมพ์เลย
+                                    </button>
+                                    {reminderSkipVisible ? (
+                                        <button
+                                            onClick={() => setShowAttendanceReminder(false)}
+                                            className="w-full text-center text-xs text-gray-400 hover:text-gray-500 transition-colors py-1"
+                                        >
+                                            ข้ามไปก่อน
+                                        </button>
+                                    ) : (
+                                        <div className="h-6" />
+                                    )}
+                                </div>
+                            </>
+                        )}
+
                     </div>
                 </div>
             )}
