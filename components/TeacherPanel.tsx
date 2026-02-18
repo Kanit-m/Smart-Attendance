@@ -95,6 +95,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [dutySchedule, setDutySchedule] = useState<Record<string, string[]>>({});
     const [myMissingPrintDays, setMyMissingPrintDays] = useState<string[]>([]);
     const [showMissingPrintModal, setShowMissingPrintModal] = useState(false);
+    const [printCloseVisible, setPrintCloseVisible] = useState(false);
     const [showPrintPopover, setShowPrintPopover] = useState(false);
     const [dutyScheduleLoaded, setDutyScheduleLoaded] = useState(false);
 
@@ -1736,12 +1737,29 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                     ❗ ขาดพิมพ์ {myMissingPrintDays.length} วัน
                                 </span>
                             </div>
-                            <button
-                                onClick={() => setShowMissingPrintModal(false)}
-                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
-                            >
-                                ปิด
-                            </button>
+                            {/* ปุ่ม CTA หลัก — พาไปพิมพ์วันแรกที่ขาด */}
+                            {myMissingPrintDays.length > 0 && (
+                                <button
+                                    onClick={() => {
+                                        setShowMissingPrintModal(false);
+                                        window.open(`/print-report?date=${myMissingPrintDays[0]}`, '_blank');
+                                    }}
+                                    className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse mb-3"
+                                >
+                                    🖨️ ไปพิมพ์เลย
+                                </button>
+                            )}
+                            {/* ลิงก์ "ข้ามไปก่อน" เล็กๆ จาง — แสดงหลัง delay 2 วิ */}
+                            {printCloseVisible ? (
+                                <button
+                                    onClick={() => setShowMissingPrintModal(false)}
+                                    className="w-full text-center text-xs text-gray-400 hover:text-gray-500 transition-colors py-1"
+                                >
+                                    ข้ามไปก่อน
+                                </button>
+                            ) : (
+                                <div className="h-6" />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1838,7 +1856,11 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 onRefresh={onRefresh}
                 missingDaysCount={missingDates.length}
                 missingPrintDaysCount={myMissingPrintDays.length}
-                onShowMissingPrintDays={() => setShowMissingPrintModal(true)}
+                onShowMissingPrintDays={() => {
+                    setShowMissingPrintModal(true);
+                    setPrintCloseVisible(false);
+                    setTimeout(() => setPrintCloseVisible(true), 2000);
+                }}
             />
 
             {/* Success Toast */}
