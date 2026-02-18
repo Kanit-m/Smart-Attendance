@@ -83,6 +83,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
     const [showAttendanceReminder, setShowAttendanceReminder] = useState(false);
     const [hasCheckedReminder, setHasCheckedReminder] = useState(false);
     const [pastMissingDates, setPastMissingDates] = useState<string[]>([]); // Excludes today
+    const [reminderCloseVisible, setReminderCloseVisible] = useState(false);
 
     // Missing Days Badge State (includes today)
     const [missingDates, setMissingDates] = useState<string[]>([]);
@@ -266,6 +267,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
 
                             if (!hasCheckedReminder && pastMissing.length > 0) {
                                 setShowAttendanceReminder(true);
+                                setReminderCloseVisible(false);
+                                setTimeout(() => setReminderCloseVisible(true), 2000);
                             }
                             setHasCheckedReminder(true);
                             return; // Use cache, skip Firestore query
@@ -339,6 +342,8 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 // Show reminder popup if there are past missing days
                 if (!hasCheckedReminder && pastMissing.length > 0) {
                     setShowAttendanceReminder(true);
+                    setReminderCloseVisible(false);
+                    setTimeout(() => setReminderCloseVisible(true), 2000);
                 }
                 setHasCheckedReminder(true);
             } catch (err) {
@@ -1623,14 +1628,31 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                             </div>
                         </div>
 
-                        {/* Footer - Only close button */}
-                        <div className="px-4 pb-4">
+                        {/* Footer - Big CTA + tiny delayed skip link */}
+                        <div className="px-4 pb-4 space-y-3">
+                            {/* ปุ่ม CTA หลัก — สีแดงเด่น พาไปวันแรกที่ขาด */}
                             <button
-                                onClick={() => setShowAttendanceReminder(false)}
-                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                                onClick={() => {
+                                    setSelectedDate(pastMissingDates[0]);
+                                    setCurrentView('check');
+                                    setShowAttendanceReminder(false);
+                                }}
+                                className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
                             >
-                                ปิด
+                                📝 ไปบันทึกย้อนหลังเลย
                             </button>
+
+                            {/* ลิงก์ "ข้ามไปก่อน" เล็กๆ จาง — แสดงหลัง delay 2 วิ */}
+                            {reminderCloseVisible ? (
+                                <button
+                                    onClick={() => setShowAttendanceReminder(false)}
+                                    className="w-full text-center text-xs text-gray-400 hover:text-gray-500 transition-colors py-1"
+                                >
+                                    ข้ามไปก่อน
+                                </button>
+                            ) : (
+                                <div className="h-6" />
+                            )}
                         </div>
                     </div>
                 </div>
