@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Printer, AlertTriangle, RefreshCw } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore/lite';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
 
@@ -107,7 +107,7 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
             const role = localStorage.getItem('currentUserRole') || 'unknown';
             await setDoc(doc(db, 'print_logs', date), {
                 date,
-                timestamp: Date.now(),
+                timestamp: serverTimestamp(),
                 printedBy,
                 role
             });

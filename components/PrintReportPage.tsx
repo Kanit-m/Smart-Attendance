@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getDocs, collection, query, orderBy, where, doc, setDoc } from 'firebase/firestore/lite';
+import { getDocs, collection, query, orderBy, where, doc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord } from '../types';
 import { mapStudentData } from '../utils';
@@ -182,7 +182,7 @@ export const PrintReportPage: React.FC = () => {
             const role = localStorage.getItem('currentUserRole') || 'unknown';
             await setDoc(doc(db, 'print_logs', date), {
                 date,
-                timestamp: Date.now(),
+                timestamp: serverTimestamp(),
                 printedBy,
                 role
             });
