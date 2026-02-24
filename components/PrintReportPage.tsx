@@ -164,6 +164,7 @@ export const PrintReportPage: React.FC = () => {
 
     // State for no data warning
     const [showNoDataWarning, setShowNoDataWarning] = useState(false);
+    const [showPrintLogError, setShowPrintLogError] = useState(false);
 
     const handlePrintClick = async () => {
         // Prevent printing when data is not loaded (e.g., quota exceeded)
@@ -190,6 +191,8 @@ export const PrintReportPage: React.FC = () => {
             localStorage.setItem('print_success_time', Date.now().toString());
         } catch (err) {
             console.error('Failed to log print action:', err);
+            setShowPrintLogError(true);
+            return; // ไม่ปริ้นถ้าบันทึก log ไม่ได้
         }
         window.print();
     };
@@ -521,6 +524,64 @@ export const PrintReportPage: React.FC = () => {
                             >
                                 <RefreshCw className="w-4 h-4" />
                                 รีเฟรชข้อมูล
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Warning Modal - Print Log Save Failed */}
+            {showPrintLogError && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in print:hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-red-50">
+                            <h3 className="font-bold text-lg text-red-800 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-600" />
+                                บันทึกการพิมพ์ไม่สำเร็จ
+                            </h3>
+                            <button
+                                onClick={() => setShowPrintLogError(false)}
+                                className="p-1 hover:bg-red-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-red-600" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6">
+                            <div className="text-center mb-6">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                                    <AlertTriangle className="w-8 h-8 text-red-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-800 mb-2">
+                                    ไม่สามารถพิมพ์ได้
+                                </h4>
+                                <p className="text-sm text-gray-500">
+                                    ระบบไม่สามารถบันทึกว่าพิมพ์แล้วได้<br />
+                                    อาจเกิดจากอินเทอร์เน็ตขัดข้อง หรือโควต้าเต็ม<br />
+                                    กรุณาลองใหม่อีกครั้ง
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                            <button
+                                onClick={() => setShowPrintLogError(false)}
+                                className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-100 transition-colors"
+                            >
+                                ปิด
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowPrintLogError(false);
+                                    handlePrintClick();
+                                }}
+                                className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                                ลองพิมพ์อีกครั้ง
                             </button>
                         </div>
                     </div>

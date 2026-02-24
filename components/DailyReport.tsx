@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Printer } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Printer, AlertTriangle, RefreshCw } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import { Student, AttendanceRecord, AttendanceStatus, Gender } from '../types';
@@ -99,27 +99,32 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
         </tr>
     );
 
+    const [showPrintLogError, setShowPrintLogError] = useState(false);
+
+    const handlePrint = async () => {
+        try {
+            const printedBy = localStorage.getItem('currentUserName') || 'ไม่ทราบ';
+            const role = localStorage.getItem('currentUserRole') || 'unknown';
+            await setDoc(doc(db, 'print_logs', date), {
+                date,
+                timestamp: Date.now(),
+                printedBy,
+                role
+            });
+        } catch (err) {
+            console.error('Failed to log print action:', err);
+            setShowPrintLogError(true);
+            return;
+        }
+        window.print();
+    };
+
     return (
         <div className="fixed inset-0 z-50 bg-gray-900/50 flex justify-center overflow-y-auto print:contents">
             <div className="bg-white w-[210mm] min-h-[297mm] p-[5mm] shadow-2xl my-8 print:shadow-none print:m-0 print:w-full relative daily-report-container">
                 {/* Close / Print Buttons */}
                 <div className="absolute top-4 right-4 flex gap-2 print:hidden">
-                    <button onClick={async () => {
-                        // Log print action to Firestore with user info (use date as doc ID to prevent duplicates)
-                        try {
-                            const printedBy = localStorage.getItem('currentUserName') || 'ไม่ทราบ';
-                            const role = localStorage.getItem('currentUserRole') || 'unknown';
-                            await setDoc(doc(db, 'print_logs', date), {
-                                date,
-                                timestamp: Date.now(),
-                                printedBy,
-                                role
-                            });
-                        } catch (err) {
-                            console.error('Failed to log print action:', err);
-                        }
-                        window.print();
-                    }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm">
+                    <button onClick={handlePrint} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm">
                         <Printer className="w-4 h-4" /> พิมพ์
                     </button>
                     <button onClick={onClose} className="bg-gray-200 text-gray-700 p-2 rounded-lg hover:bg-gray-300"><X className="w-5 h-5" /></button>
@@ -222,6 +227,45 @@ export const DailyReport: React.FC<DailyReportProps> = ({ students, attendances,
                     </div>
                 </div>
             </div>
+
+            {/* Warning Modal - Print Log Save Failed */}
+            {showPrintLogError && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print:hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-red-50">
+                            <h3 className="font-bold text-lg text-red-800 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-600" />
+                                บันทึกการพิมพ์ไม่สำเร็จ
+                            </h3>
+                            <button onClick={() => setShowPrintLogError(false)} className="p-1 hover:bg-red-100 rounded-full transition-colors">
+                                <X className="w-5 h-5 text-red-600" />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <div className="text-center mb-6">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                                    <AlertTriangle className="w-8 h-8 text-red-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-gray-800 mb-2">ไม่สามารถพิมพ์ได้</h4>
+                                <p className="text-sm text-gray-500">
+                                    ระบบไม่สามารถบันทึกว่าพิมพ์แล้วได้<br />
+                                    อาจเกิดจากอินเทอร์เน็ตขัดข้อง หรือโควต้าเต็ม<br />
+                                    กรุณาลองใหม่อีกครั้ง
+                                </p>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                            <button onClick={() => setShowPrintLogError(false)} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-100 transition-colors">
+                                ปิด
+                            </button>
+                            <button onClick={() => { setShowPrintLogError(false); handlePrint(); }} className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2">
+                                <RefreshCw className="w-4 h-4" />
+                                ลองพิมพ์อีกครั้ง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Print Styles */}
             <style>{`
