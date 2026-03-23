@@ -25,7 +25,9 @@ interface TeacherPanelProps {
     onLogout: () => void;
     isDataStale?: boolean;
     onRefresh?: () => void;
-    viewAsTeacherName?: string | null; // Admin can view as specific teacher
+    viewAsTeacherName?: string | null;
+    semesterStartDate?: string | null;
+    semesterStatus?: 'active' | 'closed';
 }
 
 const GRADE_OPTIONS = [
@@ -42,7 +44,7 @@ const STATUS_CONFIG = [
     { status: AttendanceStatus.ABSENT, label: 'ขาด', color: 'bg-rose-500 hover:bg-rose-600', text: 'text-rose-600', bg: 'bg-rose-100', icon: UserX },
 ];
 
-export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout, isDataStale = false, onRefresh, viewAsTeacherName }) => {
+export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStudents = [], onBackToAdmin, onLogout, isDataStale = false, onRefresh, viewAsTeacherName, semesterStartDate, semesterStatus = 'active' }) => {
     // Compute effective teacher name for duty calculation (Admin can view as another teacher)
     const effectiveTeacherName = viewAsTeacherName || currentUser.name;
     // Navigation & View State
@@ -283,9 +285,13 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 }
             }
 
-            // Start from day 1 of current month
-            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            const firstDateStr = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-01`;
+            // Start from day 1 of current month, or semester start if newer
+            let firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            if (semesterStartDate) {
+                const semesterDate = new Date(semesterStartDate + 'T00:00:00');
+                if (semesterDate > firstDayOfMonth) firstDayOfMonth = semesterDate;
+            }
+            const firstDateStr = firstDayOfMonth.toLocaleDateString('sv-SE');
 
             try {
                 // Query Firestore for all attendance records this month for this class
@@ -395,9 +401,13 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 today.setHours(0, 0, 0, 0);
                 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-                // Start from day 1 of current month
-                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                const firstDateStr = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-01`;
+                // Start from day 1 of current month, or semester start if newer
+                let firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                if (semesterStartDate) {
+                    const semesterDate = new Date(semesterStartDate + 'T00:00:00');
+                    if (semesterDate > firstDayOfMonth) firstDayOfMonth = semesterDate;
+                }
+                const firstDateStr = firstDayOfMonth.toLocaleDateString('sv-SE');
 
                 // Find which day names this teacher is on duty
                 const dayMap: Record<number, string> = {
@@ -641,6 +651,13 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
         const dayOfWeek = selectedDateObj.getDay();
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             alert('ไม่สามารถบันทึกเช็คชื่อในวันเสาร์-อาทิตย์ได้');
+            setShowConfirmModal(false);
+            return;
+        }
+
+        // Prevent saving during closed semester
+        if (semesterStatus === 'closed') {
+            alert('ไม่สามารถบันทึกได้ ระบบปิดภาคเรียนอยู่');
             setShowConfirmModal(false);
             return;
         }
@@ -929,7 +946,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         </button>
                         <button
                             onClick={handleSaveClick}
-                            disabled={loading || saving}
+                            disabled={loading || saving || semesterStatus === 'closed'}
                             className="hidden md:flex items-center gap-2 px-4 py-2 text-white rounded-lg font-bold shadow-sm hover:opacity-90 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             style={{ backgroundColor: '#003060' }}
                         >
@@ -1506,7 +1523,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                 {currentView === 'dashboard' && RenderDashboard()}
                 {currentView === 'room_history' && RenderRoomHistory()}
                 {currentView === 'school_dashboard' && (
-                    <Dashboard embedded students={allStudents} isDutyTeacher={isTodayMyDutyDay} />
+                    <Dashboard embedded students={allStudents} isDutyTeacher={isTodayMyDutyDay} semesterStartDate={semesterStartDate} semesterStatus={semesterStatus} />
                 )}
 
             </div>

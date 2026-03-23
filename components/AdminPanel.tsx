@@ -23,7 +23,11 @@ import { TeacherStatusCard } from './TeacherStatusCard';
 interface AdminPanelProps {
   onSwitchToTeacherView: (teacherName?: string) => void;
   onLogout: () => void;
-  onStudentChange?: () => void; // Called after student data changes (add/delete/withdraw)
+  onStudentChange?: () => void;
+  semesterStartDate?: string | null;
+  semesterStatus?: 'active' | 'closed';
+  onSemesterChange?: (startDate: string) => void;
+  onSemesterStatusChange?: (status: 'active' | 'closed') => void;
 }
 
 const GRADE_OPTIONS = [
@@ -69,7 +73,7 @@ const updateStudentVersion = async () => {
   }
 };
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout, onStudentChange }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, onLogout, onStudentChange, semesterStartDate, semesterStatus = 'active', onSemesterChange, onSemesterStatusChange }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<AppUser[]>([]);
@@ -196,7 +200,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
   // Only fetch data when tab is accessed AND data hasn't been loaded yet
   useEffect(() => {
-    if ((activeTab === 0 || activeTab === 1 || activeTab === 4) && !dataLoaded.students) {
+    if ((activeTab === 0 || activeTab === 1 || activeTab === 4 || activeTab === 11) && !dataLoaded.students) {
       fetchStudents();
     }
     // Also load teachers on tab 0 (Dashboard) for view-as-teacher dropdown
@@ -582,8 +586,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toLocaleDateString('sv-SE');
 
-      // Start from day 1 of current month
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      // Start from day 1 of current month, or semester start date if it's newer
+      let firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      if (semesterStartDate) {
+        const semesterDate = new Date(semesterStartDate + 'T00:00:00');
+        if (semesterDate > firstDayOfMonth) {
+          firstDayOfMonth = semesterDate;
+        }
+      }
       const firstDateStr = firstDayOfMonth.toLocaleDateString('sv-SE');
 
       // Get today's day name for duty check
@@ -1160,6 +1170,160 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
 
+  // Grade promotion mapping: current grade -> next grade
+  const GRADE_PROMOTION_MAP: Record<string, string | null> = {};
+  for (let i = 0; i < GRADE_OPTIONS.length - 1; i++) {
+    GRADE_PROMOTION_MAP[GRADE_OPTIONS[i]] = GRADE_OPTIONS[i + 1];
+  }
+  GRADE_PROMOTION_MAP[GRADE_OPTIONS[GRADE_OPTIONS.length - 1]] = null; // ป.6 -> จบการศึกษา
+
+  // Get promotion preview data
+  const getPromotionPreview = () => {
+    const activeStudents = students.filter(s => s.status !== StudentStatus.WITHDRAWN);
+    return GRADE_OPTIONS.map(grade => {
+      const count = activeStudents.filter(s => s.grade === grade).length;
+      const nextGrade = GRADE_PROMOTION_MAP[grade];
+      return {
+        currentGrade: grade,
+        nextGrade: nextGrade,
+        label: nextGrade || '🎓 จบการศึกษา (withdrawn)',
+        count,
+        isGraduating: nextGrade === null
+      };
+    });
+  };
+
+  // Close semester (step 1: lock the system)
+  const handleCloseSemester = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: '⚠️ ยืนยันปิดภาคเรียน',
+      message: 'ระบบจะล็อคไม่ให้ครูบันทึกเช็คชื่อจนกว่าจะเปิดเทอมใหม่ ยืนยันหรือไม่?',
+      isDangerous: true,
+      action: async () => {
+        setLoadingAction(true);
+        try {
+          await setDoc(doc(db, 'metadata', 'semester'), {
+            status: 'closed',
+            closedAt: Date.now(),
+            startDate: semesterStartDate || null,
+            createdAt: Date.now()
+          });
+
+          // Log the close event
+          await addDoc(collection(db, 'semester_logs'), {
+            action: 'semester_closed',
+            timestamp: Date.now(),
+            date: new Date().toLocaleDateString('sv-SE')
+          });
+
+          onSemesterStatusChange?.('closed');
+          showToast('ปิดภาคเรียนเรียบร้อยแล้ว ระบบล็อคการบันทึกแล้ว', 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (e: any) {
+          console.error('Close semester error:', e);
+          showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+        } finally {
+          setLoadingAction(false);
+        }
+      }
+    });
+  };
+
+  // Execute grade promotion (step 2: open new semester)
+  const handleGradePromotion = () => {
+    const preview = getPromotionPreview();
+    const totalStudents = preview.reduce((sum, p) => sum + p.count, 0);
+    const graduatingCount = preview.find(p => p.isGraduating)?.count || 0;
+
+    setConfirmModal({
+      isOpen: true,
+      title: '⚠️ ยืนยันเลื่อนชั้นนักเรียน',
+      message: `คุณกำลังจะเลื่อนชั้นนักเรียนทั้งหมด ${totalStudents} คน${graduatingCount > 0 ? ` (รวมเด็ก ${GRADE_OPTIONS[GRADE_OPTIONS.length - 1]} จำนวน ${graduatingCount} คนที่จะจบการศึกษา)` : ''} การดำเนินการนี้ไม่สามารถย้อนกลับได้ง่าย ยืนยันหรือไม่?`,
+      isDangerous: true,
+      action: async () => {
+        setLoadingAction(true);
+        try {
+          const activeStudents = students.filter(s => s.status !== StudentStatus.WITHDRAWN);
+          let promotedCount = 0;
+          let graduatedCount = 0;
+
+          // Firestore writeBatch limit: 500 operations per batch
+          const BATCH_LIMIT = 499;
+          let currentBatch = writeBatch(db);
+          let batchCount = 0;
+
+          for (const student of activeStudents) {
+            const nextGrade = GRADE_PROMOTION_MAP[student.grade];
+            const studentRef = doc(db, 'students', student.id);
+
+            if (nextGrade === null) {
+              // ป.6 -> จบการศึกษา
+              currentBatch.update(studentRef, {
+                status: StudentStatus.WITHDRAWN,
+                withdrawnAt: Date.now()
+              });
+              graduatedCount++;
+              batchCount++;
+            } else if (nextGrade) {
+              // เลื่อนชั้น
+              currentBatch.update(studentRef, { grade: nextGrade });
+              promotedCount++;
+              batchCount++;
+            }
+
+            // Commit and start new batch if limit reached
+            if (batchCount >= BATCH_LIMIT) {
+              await currentBatch.commit();
+              currentBatch = writeBatch(db);
+              batchCount = 0;
+            }
+          }
+
+          // Commit remaining operations
+          if (batchCount > 0) {
+            await currentBatch.commit();
+          }
+
+          // Log the promotion event
+          await addDoc(collection(db, 'semester_logs'), {
+            action: 'grade_promotion',
+            promotedCount,
+            graduatedCount,
+            totalStudents: activeStudents.length,
+            timestamp: Date.now(),
+            date: new Date().toLocaleDateString('sv-SE')
+          });
+
+          // Save semester start date (new semester starts today) + set status back to active
+          const newSemesterStart = new Date().toLocaleDateString('sv-SE');
+          await setDoc(doc(db, 'metadata', 'semester'), {
+            startDate: newSemesterStart,
+            status: 'active',
+            createdAt: Date.now()
+          });
+          onSemesterChange?.(newSemesterStart);
+          onSemesterStatusChange?.('active');
+
+          // Update version to trigger refresh on other clients
+          await updateStudentVersion();
+
+          // Refresh local student data
+          await fetchStudents();
+          onStudentChange?.();
+
+          showToast(`เลื่อนชั้นสำเร็จ! เลื่อน ${promotedCount} คน, จบการศึกษา ${graduatedCount} คน`, 'success');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (e: any) {
+          console.error('Grade promotion error:', e);
+          showToast(`เกิดข้อผิดพลาด: ${e.message}`, 'error');
+        } finally {
+          setLoadingAction(false);
+        }
+      }
+    });
+  };
+
   const tabs = [
     { id: 0, label: 'สถิติ', icon: LayoutDashboard },
     { id: 1, label: 'รายชื่อ', icon: Users },
@@ -1171,6 +1335,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     { id: 8, label: 'มอนิเตอร์', icon: Printer },
     { id: 9, label: 'สถานะครู', icon: Activity },
     { id: 10, label: 'ตารางเวร', icon: ClipboardList },
+    { id: 11, label: 'ปิดเทอม', icon: GraduationCap },
   ];
 
   return (
@@ -1219,7 +1384,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
 
       {/* Content Area - No overflow, let body scroll */}
       <div className="flex-1 p-4 md:p-8 bg-white/30">
-        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} isAdmin={true} /></div>}
+        {activeTab === 0 && <div className="-m-2 md:m-0"><Dashboard embedded students={students} isAdmin={true} semesterStartDate={semesterStartDate} semesterStatus={semesterStatus} /></div>}
 
         {activeTab === 1 && (
           <div className="space-y-4 animate-fade-in">
@@ -2594,6 +2759,157 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 <li>เลือกครูที่รับผิดชอบพิมพ์รายงานแต่ละวัน (2 คนต่อวัน)</li>
                 <li>ระบบจะแสดงชื่อครูเวรในหน้า "มอนิเตอร์"</li>
                 <li>หากคนอื่นพิมพ์แทน ระบบจะแสดงให้เห็นว่าใครพิมพ์และใครเป็นเวร</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 11: ปิดเทอม / เปิดเทอมใหม่ */}
+        {activeTab === 11 && (
+          <div className="space-y-6 animate-fade-in">
+            <div>
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <GraduationCap className="w-6 h-6 text-orange-500" />
+                {semesterStatus === 'closed' ? 'เปิดเทอมใหม่ — เลื่อนชั้นนักเรียน' : 'ปิดภาคเรียน'}
+              </h3>
+              <p className="text-gray-500 text-sm mt-1">
+                {semesterStatus === 'closed' ? 'ระบบปิดอยู่ กดเปิดเทอมใหม่เพื่อเลื่อนชั้นและเริ่มเทอมใหม่' : 'ล็อคระบบและเตรียมเปิดเทอมใหม่'}
+              </p>
+            </div>
+
+            {/* Current Status Banner */}
+            <div className={`rounded-xl p-4 border ${semesterStatus === 'closed' ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${semesterStatus === 'closed' ? 'bg-red-200' : 'bg-emerald-200'}`}>
+                  {semesterStatus === 'closed'
+                    ? <AlertTriangle className="w-5 h-5 text-red-600" />
+                    : <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  }
+                </div>
+                <div>
+                  <p className={`font-bold ${semesterStatus === 'closed' ? 'text-red-800' : 'text-emerald-800'}`}>
+                    {semesterStatus === 'closed' ? '🔒 ปิดภาคเรียนอยู่ — ระบบล็อคแล้ว' : '✅ ระบบเปิดใช้งานปกติ'}
+                  </p>
+                  <p className={`text-sm ${semesterStatus === 'closed' ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {semesterStatus === 'closed' ? 'ครูไม่สามารถบันทึกเช็คชื่อได้จนกว่าจะเปิดเทอมใหม่' : 'ครูสามารถบันทึกเช็คชื่อได้ตามปกติ'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {semesterStatus === 'active' ? (
+              /* === STEP 1: ปิดเทอม === */
+              <>
+                {/* Warning */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-bold mb-1">⚠️ คำเตือนก่อนปิดเทอม</p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-700">
+                        <li>ระบบจะ <strong>ล็อค</strong> ไม่ให้ครูบันทึกเช็คชื่อจนกว่าจะเปิดเทอมใหม่</li>
+                        <li>ข้อมูลการเช็คชื่อเดิมจะยังคงอยู่ (ไม่ถูกลบ)</li>
+                        <li>การเลื่อนชั้นจะทำในขั้นตอน "เปิดเทอมใหม่"</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Close Semester Button */}
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={handleCloseSemester}
+                    disabled={loadingAction}
+                    className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base"
+                  >
+                    <AlertTriangle className="w-5 h-5" />
+                    ปิดภาคเรียน
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* === STEP 2: เปิดเทอมใหม่ (+ เลื่อนชั้น) === */
+              <>
+                {/* Warning Box */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-bold mb-1">⚠️ คำเตือน — กรุณาอ่านก่อนดำเนินการ</p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-700">
+                        <li>ระบบจะเลื่อนชั้นนักเรียน <strong>ที่ยังไม่ลาออก</strong> ทุกคน</li>
+                        <li>นักเรียน <strong>{GRADE_OPTIONS[GRADE_OPTIONS.length - 1]}</strong> จะถูกตั้งเป็น "จบการศึกษา" (withdrawn)</li>
+                        <li>การดำเนินการนี้ <strong>ไม่สามารถย้อนกลับ</strong> ได้ง่าย</li>
+                        <li>ข้อมูลการเช็คชื่อเดิมจะยังคงอยู่ (ไม่ถูกลบ)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview Table */}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <h4 className="font-bold text-gray-700 text-sm">ตัวอย่างการเลื่อนชั้น</h4>
+                  </div>
+                  <table className="w-full text-sm text-left text-black">
+                    <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                      <tr>
+                        <th className="px-4 py-3">ชั้นเดิม</th>
+                        <th className="px-4 py-3 text-center">→</th>
+                        <th className="px-4 py-3">ชั้นใหม่</th>
+                        <th className="px-4 py-3 text-right">จำนวน</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {getPromotionPreview().map((row) => (
+                        <tr key={row.currentGrade} className={`${row.isGraduating ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
+                          <td className="px-4 py-3 font-medium">{row.currentGrade}</td>
+                          <td className="px-4 py-3 text-center text-gray-400">→</td>
+                          <td className={`px-4 py-3 font-medium ${row.isGraduating ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {row.label}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold ${row.count === 0 ? 'bg-gray-100 text-gray-400' : row.isGraduating ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {row.count} คน
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50 font-bold text-sm">
+                      <tr>
+                        <td className="px-4 py-3" colSpan={3}>รวมทั้งหมด</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                            {getPromotionPreview().reduce((sum, p) => sum + p.count, 0)} คน
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Action Button */}
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={handleGradePromotion}
+                    disabled={loadingAction || getPromotionPreview().every(p => p.count === 0)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-base"
+                  >
+                    <GraduationCap className="w-5 h-5" />
+                    เปิดเทอมใหม่ + เลื่อนชั้นทั้งหมด
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Info Box */}
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-700">
+              <p className="font-bold mb-2">💡 ขั้นตอนการทำงาน</p>
+              <ul className="list-disc list-inside space-y-1 text-blue-600">
+                <li><strong>ขั้นที่ 1:</strong> กด "ปิดภาคเรียน" → ระบบล็อค ครูบันทึกไม่ได้</li>
+                <li><strong>ขั้นที่ 2:</strong> เมื่อพร้อมเปิดเทอม กด "เปิดเทอมใหม่" → เลื่อนชั้น + ปลดล็อค</li>
+                <li>หลังเลื่อนชั้น สามารถเพิ่มนักเรียนใหม่ ({GRADE_OPTIONS[0]}) ได้ที่แท็บ "เพิ่มนร."</li>
               </ul>
             </div>
           </div>

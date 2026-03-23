@@ -17,7 +17,9 @@ interface DashboardProps {
     students?: Student[];
     holidays?: Holiday[];  // Pass from parent to avoid refetch on remount
     isAdmin?: boolean;  // Show admin-only features like recording status
-    isDutyTeacher?: boolean;  // Show recording status card for duty teachers
+    isDutyTeacher?: boolean;
+    semesterStartDate?: string | null;
+    semesterStatus?: 'active' | 'closed';
 }
 
 interface GradeStats {
@@ -35,7 +37,7 @@ interface GradeStats {
     isSubmitted: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays, isAdmin = false, isDutyTeacher = false }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students = [], holidays: parentHolidays, isAdmin = false, isDutyTeacher = false, semesterStartDate, semesterStatus = 'active' }) => {
     // Initialize with Today's date
     const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const dateInputRef = useRef<HTMLInputElement>(null);
@@ -635,6 +637,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                                 type="date"
                                 value={currentDate}
                                 onChange={(e) => setCurrentDate(e.target.value)}
+                                min={semesterStartDate || undefined}
                                 className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
                             />
                             <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 group-hover:border-brand-400 group-hover:shadow-md transition-all">
@@ -649,6 +652,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                         </div>
                     </div>
                 </div>
+
+                {/* Semester Closed Banner */}
+                {semesterStatus === 'closed' && (
+                    <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl shadow-sm flex items-center gap-4 animate-slide-up">
+                        <div className="bg-red-200 p-3 rounded-full shadow-sm">
+                            <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg leading-tight">🔒 ปิดภาคเรียน</h3>
+                            <p className="text-xs text-red-600 font-medium">ระบบล็อคอยู่ รอเปิดเทอมใหม่โดยผู้ดูแลระบบ</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Weekend Alert - Auto detect Saturday/Sunday */}
                 {(() => {

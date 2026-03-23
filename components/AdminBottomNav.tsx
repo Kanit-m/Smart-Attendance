@@ -32,6 +32,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
         { id: 8, label: 'มอนิเตอร์', icon: <Printer className="w-5 h-5" />, color: 'bg-indigo-500' },
         { id: 9, label: 'สถานะครู', icon: <Activity className="w-5 h-5" />, color: 'bg-violet-500' },
         { id: 10, label: 'ตารางเวร', icon: <ClipboardList className="w-5 h-5" />, color: 'bg-pink-500' },
+        { id: 11, label: 'ปิดเทอม', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-orange-500' },
         { id: -1, label: 'มุมมองครู', icon: <GraduationCap className="w-5 h-5" />, color: 'bg-teal-500' },
     ];
 
@@ -45,7 +46,7 @@ export const AdminBottomNav: React.FC<AdminBottomNavProps> = ({
     };
 
     // Check if current tab is one of the speed dial tabs
-    const isSpeedDialTabActive = [2, 3, 4, 6, 7, 8, 9, 10].includes(activeTab);
+    const isSpeedDialTabActive = [2, 3, 4, 6, 7, 8, 9, 10, 11].includes(activeTab);
 
     // Use portal to render at body level (fixes fixed positioning inside overflow containers)
     return createPortal(

@@ -50,6 +50,8 @@ function App() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isDataStale, setIsDataStale] = useState(false); // true = needs refresh (red), false = up-to-date (green)
   const [viewAsTeacherName, setViewAsTeacherName] = useState<string | null>(null); // Admin can view as specific teacher
+  const [semesterStartDate, setSemesterStartDate] = useState<string | null>(null); // วันเริ่มเทอมปัจจุบัน
+  const [semesterStatus, setSemesterStatus] = useState<'active' | 'closed'>('active');
 
   // Check if returning user (has saved session)
   const hasSession = localStorage.getItem('app_view') && localStorage.getItem('app_view') !== 'landing';
@@ -193,10 +195,25 @@ function App() {
     }
   }, []);
 
+  // Load semester start date from Firestore
+  const fetchSemesterStartDate = React.useCallback(async () => {
+    try {
+      const semesterDoc = await getDoc(doc(db, 'metadata', 'semester'));
+      if (semesterDoc.exists()) {
+        const data = semesterDoc.data();
+        setSemesterStartDate(data?.startDate || null);
+        setSemesterStatus(data?.status || 'active');
+      }
+    } catch (e) {
+      console.error('Error fetching semester data', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStudents();
     checkDataFreshness(); // Check freshness on initial load only
-  }, [fetchStudents, checkDataFreshness]);
+    fetchSemesterStartDate();
+  }, [fetchStudents, checkDataFreshness, fetchSemesterStartDate]);
 
   const handleLogin = async (username: string, pass: string, intendedRole: Role) => {
     // Sanitize input: Remove ALL whitespace and convert to lowercase
@@ -311,7 +328,7 @@ function App() {
       />
 
       <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'teacher' ? 'p-0 max-w-none' : ''}`}>
-        {view === 'dashboard' && <Dashboard students={students} />}
+        {view === 'dashboard' && <Dashboard students={students} semesterStartDate={semesterStartDate} semesterStatus={semesterStatus} />}
 
         {view === 'admin' && currentUser?.role === Role.ADMIN && (
           <div className="animate-fade-in">
@@ -326,6 +343,10 @@ function App() {
               }}
               onLogout={handleLogout}
               onStudentChange={() => fetchStudents(true)}
+              semesterStartDate={semesterStartDate}
+              semesterStatus={semesterStatus}
+              onSemesterChange={(newStartDate: string) => setSemesterStartDate(newStartDate)}
+              onSemesterStatusChange={(status: 'active' | 'closed') => setSemesterStatus(status)}
             />
           </div>
         )}
@@ -347,6 +368,8 @@ function App() {
               isDataStale={isDataStale}
               onRefresh={() => fetchStudents(true)}
               viewAsTeacherName={viewAsTeacherName}
+              semesterStartDate={semesterStartDate}
+              semesterStatus={semesterStatus}
             />
           </div>
         )}
