@@ -93,8 +93,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
   }>({ isOpen: false, title: '', message: '', action: async () => { }, isDangerous: false });
 
   // Unified State for Calendar (Holidays + Activities)
-  const [calendarEvents, setCalendarEvents] = useState<{ id: string, type: 'holiday' | 'activity', date: string, title: string, description?: string }[]>([]);
-  const [newEvent, setNewEvent] = useState({ type: 'activity' as 'activity' | 'holiday', title: '', date: '', description: '' });
+  const [calendarEvents, setCalendarEvents] = useState<{ id: string, type: 'holiday' | 'activity', date: string, title: string, description?: string, holidayGrades?: string[] }[]>([]);
+  const [newEvent, setNewEvent] = useState({ type: 'activity' as 'activity' | 'holiday', title: '', date: '', description: '', holidayGrades: [] as string[] });
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   const [newStudent, setNewStudent] = useState<Partial<Student>>({
@@ -265,10 +265,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         type: eventToEdit.type,
         title: eventToEdit.title,
         date: eventToEdit.date,
-        description: eventToEdit.description || ''
+        description: eventToEdit.description || '',
+        holidayGrades: eventToEdit.holidayGrades || []
       });
     } else {
-      setNewEvent({ type: 'activity', title: '', date: '', description: '' });
+      setNewEvent({ type: 'activity', title: '', date: '', description: '', holidayGrades: [] });
     }
   }, [editingEventId, calendarEvents]);
 
@@ -470,13 +471,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       // 2. Fetch Holidays
       const qHol = query(collection(db, 'holidays'));
       const snapHol = await getDocs(qHol);
-      const hols = snapHol.docs.map(d => ({
-        id: d.id,
-        type: 'holiday' as const,
-        date: d.data().date,
-        title: d.data().description, // Map description to title for unified interface
-        description: 'วันหยุด'
-      }));
+      const hols = snapHol.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          type: 'holiday' as const,
+          date: data.date,
+          title: data.description, // Map description to title for unified interface
+          description: 'วันหยุด',
+          holidayGrades: Array.isArray(data.grades) ? data.grades : []
+        };
+      });
 
       // 3. Merge and Sort
       const merged = [...acts, ...hols].sort((a, b) => b.date.localeCompare(a.date)); // Descending for management list
@@ -800,8 +805,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           await deleteDoc(doc(db, oldCollection, editingEventId));
 
           const data = newEvent.type === 'holiday'
-            ? { date: newEvent.date, description: newEvent.title } // Holiday schema
-            : { title: newEvent.title, date: newEvent.date, description: newEvent.description, createdAt: Date.now() }; // Activity schema
+            ? { date: newEvent.date, description: newEvent.title, ...(newEvent.holidayGrades.length > 0 ? { grades: newEvent.holidayGrades } : {}) }
+            : { title: newEvent.title, date: newEvent.date, description: newEvent.description, createdAt: Date.now() };
 
           const newDoc = await addDoc(collection(db, newCollection), data);
 
@@ -810,7 +815,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
           // Same type update
           const collectionName = newEvent.type === 'holiday' ? 'holidays' : 'school_activities';
           const data = newEvent.type === 'holiday'
-            ? { date: newEvent.date, description: newEvent.title }
+            ? { date: newEvent.date, description: newEvent.title, grades: newEvent.holidayGrades.length > 0 ? newEvent.holidayGrades : [] }
             : { title: newEvent.title, date: newEvent.date, description: newEvent.description };
 
           await updateDoc(doc(db, collectionName, editingEventId), data);
@@ -822,7 +827,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
         // Create Mode
         const collectionName = newEvent.type === 'holiday' ? 'holidays' : 'school_activities';
         const data = newEvent.type === 'holiday'
-          ? { date: newEvent.date, description: newEvent.title }
+          ? { date: newEvent.date, description: newEvent.title, ...(newEvent.holidayGrades.length > 0 ? { grades: newEvent.holidayGrades } : {}) }
           : { title: newEvent.title, date: newEvent.date, description: newEvent.description, createdAt: Date.now() };
 
         const docRef = await addDoc(collection(db, collectionName), data);
@@ -837,7 +842,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
       }
 
       setEditingEventId(null);
-      setNewEvent({ type: 'activity', title: '', date: '', description: '' });
+      setNewEvent({ type: 'activity', title: '', date: '', description: '', holidayGrades: [] });
 
     } catch (e) {
       console.error(e);
@@ -2082,7 +2087,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 <h3 className="font-bold text-black flex items-center gap-2">
                   <CalendarDays className="w-5 h-5 text-indigo-600" /> {editingEventId ? 'แก้ไขรายการ' : 'เพิ่มรายการปฏิทิน'}
                 </h3>
-                {editingEventId && <button onClick={() => { setEditingEventId(null); setNewEvent({ type: 'activity', title: '', date: '', description: '' }); }} className="text-red-500 text-xs font-bold underline">ยกเลิกแก้ไข</button>}
+                {editingEventId && <button onClick={() => { setEditingEventId(null); setNewEvent({ type: 'activity', title: '', date: '', description: '', holidayGrades: [] }); }} className="text-red-500 text-xs font-bold underline">ยกเลิกแก้ไข</button>}
               </div>
 
               <form onSubmit={handleCalendarSubmit} className="space-y-4">
@@ -2141,6 +2146,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                   </div>
                 )}
 
+                {/* Grade-specific holiday selection */}
+                {newEvent.type === 'holiday' && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                    <label className="text-xs font-bold text-orange-700 mb-2 block">ขอบเขตวันหยุด</label>
+                    <div className="flex gap-3 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, holidayGrades: [] })}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${newEvent.holidayGrades.length === 0 ? 'bg-orange-500 text-white border-orange-500 shadow-sm' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}
+                      >
+                        หยุดทุกชั้น
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, holidayGrades: newEvent.holidayGrades.length === 0 ? ['อนุบาล 2', 'อนุบาล 3'] : newEvent.holidayGrades })}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${newEvent.holidayGrades.length > 0 ? 'bg-orange-500 text-white border-orange-500 shadow-sm' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}
+                      >
+                        เฉพาะบางชั้น
+                      </button>
+                    </div>
+                    {newEvent.holidayGrades.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {GRADE_OPTIONS.map(g => {
+                          const isSelected = newEvent.holidayGrades.includes(g);
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => {
+                                const updated = isSelected
+                                  ? newEvent.holidayGrades.filter(x => x !== g)
+                                  : [...newEvent.holidayGrades, g];
+                                setNewEvent({ ...newEvent, holidayGrades: updated });
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${isSelected
+                                ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:text-orange-600'}`}
+                            >
+                              {g.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button type="submit" disabled={loadingAction} className={`${newEvent.type === 'holiday' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white w-full py-3 rounded-xl font-bold shadow-sm flex justify-center items-center`}>
                   {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingEventId ? 'บันทึกการแก้ไข' : 'บันทึกรายการ')}
                 </button>
@@ -2188,7 +2240,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h5 className="font-bold text-lg text-gray-800">{event.title}</h5>
-                            {isHoliday && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm">วันหยุด</span>}
+                            {isHoliday && <span className="bg-orange-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm">{event.holidayGrades && event.holidayGrades.length > 0 ? `หยุดเฉพาะ: ${event.holidayGrades.map(g => g.replace('ประถมศึกษาปีที่ ', 'ป.').replace('อนุบาล ', 'อ.')).join(', ')}` : 'วันหยุด (ทุกชั้น)'}</span>}
                             {isToday && <span className="bg-emerald-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold animate-pulse shadow-sm">วันนี้</span>}
                           </div>
 

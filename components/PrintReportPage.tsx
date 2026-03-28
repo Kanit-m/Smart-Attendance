@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getDocs, collection, query, orderBy, where, doc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { db } from '../firebase';
-import { Student, AttendanceRecord } from '../types';
-import { mapStudentData } from '../utils';
+import { Student, AttendanceRecord, Holiday } from '../types';
+import { mapStudentData, isHolidayForGrade } from '../utils';
 import { DailyReportPreview } from './DailyReportPreview';
 import { PrintLoading } from './PrintLoading';
 import { Printer, ArrowLeft, AlertTriangle, X, RefreshCw } from 'lucide-react';
@@ -26,6 +26,7 @@ export const PrintReportPage: React.FC = () => {
     const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isDataStale, setIsDataStale] = useState(false);
+    const [holidays, setHolidays] = useState<Holiday[]>([]);
 
     // Check if data is stale (more than 10 minutes old)
     useEffect(() => {
@@ -110,6 +111,20 @@ export const PrintReportPage: React.FC = () => {
         if (date) fetchData();
     }, [date, isInitialized]);
 
+    // Load holidays from Firestore
+    useEffect(() => {
+        const loadHolidays = async () => {
+            try {
+                const snap = await getDocs(collection(db, 'holidays'));
+                const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Holiday));
+                setHolidays(data);
+            } catch (err) {
+                console.error('Error loading holidays:', err);
+            }
+        };
+        loadHolidays();
+    }, []);
+
     // Auto-refresh when user returns to the page (visibility change)
     useEffect(() => {
         const handleVisibilityChange = async () => {
@@ -147,11 +162,19 @@ export const PrintReportPage: React.FC = () => {
 
     // Calculate missing classes
     const missingClasses = useMemo(() => {
+        // Find holidays that apply to the selected date
+        const dateHolidays = holidays.filter(h => h.date === date);
+
         const grades = [...new Set<string>(activeStudents.map(s => s.grade))];
         return grades
             .filter(grade => {
                 const hasStudents = activeStudents.some(s => s.grade === grade);
                 const hasAttendance = attendances.some(a => a.grade === grade);
+
+                // Skip grades that are on holiday for this date
+                const isOnHoliday = dateHolidays.some(h => isHolidayForGrade(h, grade));
+                if (isOnHoliday) return false;
+
                 return hasStudents && !hasAttendance;
             })
             .sort((a, b) => {
@@ -160,7 +183,7 @@ export const PrintReportPage: React.FC = () => {
                 if (!isKA && isKB) return 1;
                 return parseInt(a.match(/\d+/)?.[0] || '0') - parseInt(b.match(/\d+/)?.[0] || '0');
             });
-    }, [activeStudents, attendances]);
+    }, [activeStudents, attendances, holidays, date]);
 
     // State for no data warning
     const [showNoDataWarning, setShowNoDataWarning] = useState(false);

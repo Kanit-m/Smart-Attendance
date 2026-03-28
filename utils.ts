@@ -1,6 +1,17 @@
 
 import { DocumentData } from 'firebase/firestore/lite';
-import { Student, Gender, StudentStatus } from './types';
+import { Student, Gender, StudentStatus, Holiday } from './types';
+
+/**
+ * Check if a holiday applies to a specific grade.
+ * - If holiday has no `grades` or empty array → applies to ALL grades (global holiday)
+ * - If holiday has `grades` with values → applies only to those grades
+ */
+export const isHolidayForGrade = (holiday: Holiday, grade: string): boolean => {
+  if (!holiday.grades || holiday.grades.length === 0) return true; // global holiday
+  return holiday.grades.includes(grade);
+};
+
 
 export const mapStudentData = (id: string, data: DocumentData): Student => {
   // Helper to find property value from multiple possible keys

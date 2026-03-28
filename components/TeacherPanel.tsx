@@ -17,6 +17,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { AttendanceHeatmap } from './AttendanceHeatmap';
 import { StudentHistoryCard } from './StudentHistoryCard';
 import { TeacherBottomNav } from './TeacherBottomNav';
+import { isHolidayForGrade } from '../utils';
 
 interface TeacherPanelProps {
     currentUser: { name: string; role: string; assignedClass?: string };
@@ -222,7 +223,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
             const newState: Record<string, AttendanceStatus> = {};
 
             students.forEach(s => {
-                newState[s.id] = (existing.get(s.id) as AttendanceStatus) || (isHoliday ? AttendanceStatus.HOLIDAY : AttendanceStatus.PRESENT);
+            newState[s.id] = (existing.get(s.id) as AttendanceStatus) || (isHoliday && isHolidayForGrade(isHoliday, selectedClass) ? AttendanceStatus.HOLIDAY : AttendanceStatus.PRESENT);
             });
             setAttendanceState(newState);
             setInitialAttendanceState(newState); // Store initial state for comparison
@@ -325,8 +326,9 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                         const day = String(checkDate.getDate()).padStart(2, '0');
                         const dateStr = `${year}-${month}-${day}`;
 
-                        // Skip holidays
-                        if (!holidays.find(h => h.date === dateStr)) {
+                        // Skip holidays that apply to this teacher's class
+                        const isOnHoliday = holidays.find(h => h.date === dateStr && isHolidayForGrade(h, currentUser.assignedClass!));
+                        if (!isOnHoliday) {
                             // If not in recordedDates, it's missing
                             if (!recordedDates.has(dateStr)) {
                                 missing.push(dateStr);

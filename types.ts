@@ -74,6 +74,7 @@ export interface Holiday {
   id: string;
   date: string; // YYYY-MM-DD
   description: string;
+  grades?: string[]; // ถ้าระบุ = หยุดเฉพาะชั้นที่เลือก, ถ้าไม่ระบุ/ว่าง = หยุดทุกชั้น
 }
 
 
