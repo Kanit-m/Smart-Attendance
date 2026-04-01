@@ -9,7 +9,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { LandingPage } from './components/LandingPage';
 import { BottomNav } from './components/BottomNav';
 import { Role, AppUser, Student } from './types';
-import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
+import { doc, getDoc, setDoc, collection, getDocs, query, orderBy } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { mapStudentData } from './utils';
@@ -203,6 +203,19 @@ function App() {
         const data = semesterDoc.data();
         setSemesterStartDate(data?.startDate || null);
         setSemesterStatus(data?.status || 'active');
+
+        // Auto-patch: add academicYear if missing on a closed semester
+        if (data?.status === 'closed' && !data?.academicYear) {
+          const now = new Date();
+          const by = now.getFullYear() + 543;
+          const academicYear = now.getMonth() < 4 ? by - 1 : by;
+          try {
+            await setDoc(doc(db, 'metadata', 'semester'), { ...data, academicYear }, { merge: true });
+            console.log(`Auto-patched academicYear: ${academicYear}`);
+          } catch (patchErr) {
+            console.error('Failed to patch academicYear:', patchErr);
+          }
+        }
       }
     } catch (e) {
       console.error('Error fetching semester data', e);

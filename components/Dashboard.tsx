@@ -660,7 +660,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                             <AlertTriangle className="w-6 h-6 text-red-600" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg leading-tight">🔒 ปิดภาคเรียน</h3>
+                            <h3 className="font-bold text-lg leading-tight">🔒 ปิดปีการศึกษา {(() => { const now = new Date(); const by = now.getFullYear() + 543; return now.getMonth() < 4 ? by - 1 : by; })()}</h3>
                             <p className="text-xs text-red-600 font-medium">ระบบล็อคอยู่ รอเปิดเทอมใหม่โดยผู้ดูแลระบบ</p>
                         </div>
                     </div>
@@ -716,7 +716,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 )}
 
                 {/* RECORDING STATUS SUMMARY - Show which classes have/haven't recorded (Admin or Duty Teacher) */}
-                {(isAdmin || isDutyTeacher) && isSchoolDay && totalClasses > 0 && (
+                {(isAdmin || isDutyTeacher) && isSchoolDay && semesterStatus !== 'closed' && totalClasses > 0 && (
                     <div className={`rounded-2xl shadow-sm border overflow-hidden animate-slide-up ${isAllSubmitted
                         ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'
                         : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'

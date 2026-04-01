@@ -1198,12 +1198,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
     });
   };
 
+  // Calculate Thai academic year (ปีการศึกษา)
+  // Academic year runs May-March: Jan-Apr = previous year, May-Dec = current year
+  const getCurrentAcademicYear = () => {
+    const now = new Date();
+    const buddhistYear = now.getFullYear() + 543;
+    // If month is Jan-Apr (0-3), academic year = previous Buddhist year
+    return now.getMonth() < 4 ? buddhistYear - 1 : buddhistYear;
+  };
+
   // Close semester (step 1: lock the system)
   const handleCloseSemester = () => {
+    const academicYear = getCurrentAcademicYear();
     setConfirmModal({
       isOpen: true,
       title: '⚠️ ยืนยันปิดภาคเรียน',
-      message: 'ระบบจะล็อคไม่ให้ครูบันทึกเช็คชื่อจนกว่าจะเปิดเทอมใหม่ ยืนยันหรือไม่?',
+      message: `ระบบจะปิดปีการศึกษา ${academicYear} และล็อคไม่ให้ครูบันทึกเช็คชื่อจนกว่าจะเปิดเทอมใหม่ ยืนยันหรือไม่?`,
       isDangerous: true,
       action: async () => {
         setLoadingAction(true);
@@ -1212,18 +1222,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
             status: 'closed',
             closedAt: Date.now(),
             startDate: semesterStartDate || null,
+            academicYear: academicYear,
             createdAt: Date.now()
           });
 
           // Log the close event
           await addDoc(collection(db, 'semester_logs'), {
             action: 'semester_closed',
+            academicYear: academicYear,
             timestamp: Date.now(),
             date: new Date().toLocaleDateString('sv-SE')
           });
 
           onSemesterStatusChange?.('closed');
-          showToast('ปิดภาคเรียนเรียบร้อยแล้ว ระบบล็อคการบันทึกแล้ว', 'success');
+          showToast(`ปิดปีการศึกษา ${academicYear} เรียบร้อยแล้ว ระบบล็อคการบันทึกแล้ว`, 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (e: any) {
           console.error('Close semester error:', e);
@@ -2825,7 +2837,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 {semesterStatus === 'closed' ? 'เปิดเทอมใหม่ — เลื่อนชั้นนักเรียน' : 'ปิดภาคเรียน'}
               </h3>
               <p className="text-gray-500 text-sm mt-1">
-                {semesterStatus === 'closed' ? 'ระบบปิดอยู่ กดเปิดเทอมใหม่เพื่อเลื่อนชั้นและเริ่มเทอมใหม่' : 'ล็อคระบบและเตรียมเปิดเทอมใหม่'}
+                {semesterStatus === 'closed' ? `ปีการศึกษา ${getCurrentAcademicYear()} ปิดแล้ว กดเปิดเทอมใหม่เพื่อเลื่อนชั้นและเริ่มเทอมใหม่` : `ปีการศึกษา ${getCurrentAcademicYear()} — ล็อคระบบและเตรียมเปิดเทอมใหม่`}
               </p>
             </div>
 
@@ -2840,7 +2852,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onSwitchToTeacherView, o
                 </div>
                 <div>
                   <p className={`font-bold ${semesterStatus === 'closed' ? 'text-red-800' : 'text-emerald-800'}`}>
-                    {semesterStatus === 'closed' ? '🔒 ปิดภาคเรียนอยู่ — ระบบล็อคแล้ว' : '✅ ระบบเปิดใช้งานปกติ'}
+                    {semesterStatus === 'closed' ? `🔒 ปิดปีการศึกษา ${getCurrentAcademicYear()} — ระบบล็อคแล้ว` : `✅ ปีการศึกษา ${getCurrentAcademicYear()} เปิดใช้งานปกติ`}
                   </p>
                   <p className={`text-sm ${semesterStatus === 'closed' ? 'text-red-600' : 'text-emerald-600'}`}>
                     {semesterStatus === 'closed' ? 'ครูไม่สามารถบันทึกเช็คชื่อได้จนกว่าจะเปิดเทอมใหม่' : 'ครูสามารถบันทึกเช็คชื่อได้ตามปกติ'}
