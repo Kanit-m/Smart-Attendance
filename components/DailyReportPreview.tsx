@@ -45,10 +45,59 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
     const activeStudentIds = new Set(activeStudents.map(s => s.id));
     const validAttendances = attendances.filter(a => activeStudentIds.has(a.studentId));
 
+    // === HISTORICAL GRADE DETECTION (handles post-promotion viewing of past dates) ===
+    
+    // Step 1: Map students WITH attendance to their historical grade
+    const studentGradeOnDate = new Map<string, string>();
+    validAttendances.forEach(a => {
+        if (!studentGradeOnDate.has(a.studentId)) {
+            studentGradeOnDate.set(a.studentId, a.grade);
+        }
+    });
+
+    // Step 2: Build current→historical grade mapping from students who HAVE attendance
+    // If a student's current grade is ป.4 but attendance says ป.3, then all ป.4 students were ป.3
+    const currentGradeToHistoricalGrade = new Map<string, string>();
+    activeStudents.forEach(s => {
+        const historicalGrade = studentGradeOnDate.get(s.id);
+        if (historicalGrade && historicalGrade !== s.grade) {
+            currentGradeToHistoricalGrade.set(s.grade, historicalGrade);
+        }
+    });
+
+    // Step 3: Reverse promotion map for cases where NO peers have attendance (e.g., ป.5 didn't check at all)
+    const REVERSE_GRADE_MAP: Record<string, string> = {
+        'อนุบาล 3': 'อนุบาล 2',
+        'ประถมศึกษาปีที่ 1': 'อนุบาล 3',
+        'ประถมศึกษาปีที่ 2': 'ประถมศึกษาปีที่ 1',
+        'ประถมศึกษาปีที่ 3': 'ประถมศึกษาปีที่ 2',
+        'ประถมศึกษาปีที่ 4': 'ประถมศึกษาปีที่ 3',
+        'ประถมศึกษาปีที่ 5': 'ประถมศึกษาปีที่ 4',
+        'ประถมศึกษาปีที่ 6': 'ประถมศึกษาปีที่ 5',
+    };
+    const hasPromotion = currentGradeToHistoricalGrade.size > 0;
+
+    // Get effective grade for a student on the report date
+    const getEffectiveGrade = (s: { id: string; grade: string }): string => {
+        // Priority 1: Has attendance record → use that grade
+        const fromAttendance = studentGradeOnDate.get(s.id);
+        if (fromAttendance) return fromAttendance;
+        // Priority 2: Peers with same current grade have attendance → use their historical grade
+        const fromPeers = currentGradeToHistoricalGrade.get(s.grade);
+        if (fromPeers) return fromPeers;
+        // Priority 3: Promotion detected but no peers → use reverse grade map
+        if (hasPromotion && REVERSE_GRADE_MAP[s.grade]) {
+            return REVERSE_GRADE_MAP[s.grade];
+        }
+        // Fallback: current grade (no promotion or already correct)
+        return s.grade;
+    };
+
     // Helper to get stats for a specific grade
     const getStats = (gradePattern: string | string[]): GradeStats => {
         const targetGrades = Array.isArray(gradePattern) ? gradePattern : [gradePattern];
-        const gradeStudents = activeStudents.filter(s => targetGrades.includes(s.grade));
+        
+        const gradeStudents = activeStudents.filter(s => targetGrades.includes(getEffectiveGrade(s)));
         const totalMale = gradeStudents.filter(s => s.gender === Gender.MALE).length;
         const totalFemale = gradeStudents.filter(s => s.gender === Gender.FEMALE).length;
         const total = totalMale + totalFemale;
@@ -60,7 +109,9 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
 
         return {
             totalMale, totalFemale, total,
-            presentMale: totalMale - absentMale, presentFemale: totalFemale - absentFemale, presentTotal: total - absentMale - absentFemale,
+            presentMale: Math.max(0, totalMale - absentMale),
+            presentFemale: Math.max(0, totalFemale - absentFemale),
+            presentTotal: Math.max(0, total - absentMale - absentFemale),
             absentMale, absentFemale, absentTotal: absentMale + absentFemale
         };
     };

@@ -314,9 +314,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         return attendances.filter(a => activeStudentIds.has(a.studentId));
     }, [attendances, activeStudents]);
 
+    // === HISTORICAL GRADE DETECTION (handles post-promotion viewing of past dates) ===
+
+    // Step 1: Map students WITH attendance to their historical grade
+    const studentGradeOnDate = useMemo(() => {
+        const map = new Map<string, string>();
+        validAttendances.forEach(a => {
+            if (!map.has(a.studentId)) {
+                map.set(a.studentId, a.grade);
+            }
+        });
+        return map;
+    }, [validAttendances]);
+
+    // Step 2: Build current→historical grade mapping from students who HAVE attendance
+    const currentGradeToHistoricalGrade = useMemo(() => {
+        const map = new Map<string, string>();
+        activeStudents.forEach(s => {
+            const historicalGrade = studentGradeOnDate.get(s.id);
+            if (historicalGrade && historicalGrade !== s.grade) {
+                map.set(s.grade, historicalGrade);
+            }
+        });
+        return map;
+    }, [activeStudents, studentGradeOnDate]);
+
+    // Step 3: Reverse promotion map for cases where NO peers have attendance
+    const REVERSE_GRADE_MAP: Record<string, string> = {
+        'อนุบาล 3': 'อนุบาล 2',
+        'ประถมศึกษาปีที่ 1': 'อนุบาล 3',
+        'ประถมศึกษาปีที่ 2': 'ประถมศึกษาปีที่ 1',
+        'ประถมศึกษาปีที่ 3': 'ประถมศึกษาปีที่ 2',
+        'ประถมศึกษาปีที่ 4': 'ประถมศึกษาปีที่ 3',
+        'ประถมศึกษาปีที่ 5': 'ประถมศึกษาปีที่ 4',
+        'ประถมศึกษาปีที่ 6': 'ประถมศึกษาปีที่ 5',
+    };
+    const hasPromotion = currentGradeToHistoricalGrade.size > 0;
+
+    // Get effective grade for a student on the viewing date
+    const getEffectiveGrade = useCallback((s: { id: string; grade: string }): string => {
+        const fromAttendance = studentGradeOnDate.get(s.id);
+        if (fromAttendance) return fromAttendance;
+        const fromPeers = currentGradeToHistoricalGrade.get(s.grade);
+        if (fromPeers) return fromPeers;
+        if (hasPromotion && REVERSE_GRADE_MAP[s.grade]) {
+            return REVERSE_GRADE_MAP[s.grade];
+        }
+        return s.grade;
+    }, [studentGradeOnDate, currentGradeToHistoricalGrade, hasPromotion]);
+
     // Memoize expensive grade statistics calculation
     const allStats = useMemo((): GradeStats[] => {
-        const uniqueGrades = Array.from(new Set(activeStudents.map(s => s.grade))) as string[];
+        // Collect grades using effective (historical) grades
+        const effectiveGrades = activeStudents.map(s => getEffectiveGrade(s));
+        const uniqueGrades = Array.from(new Set(effectiveGrades)) as string[];
+
         // Custom sort: Anuban first, then Prathom
         const grades = uniqueGrades.sort((a, b) => {
             const isKA = a.includes('อนุบาล');
@@ -331,7 +383,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
         });
 
         return grades.map(grade => {
-            const studentsInGrade = activeStudents.filter(s => s.grade === grade);
+            const studentsInGrade = activeStudents.filter(s => getEffectiveGrade(s) === grade);
             const male = studentsInGrade.filter(s => s.gender === Gender.MALE).length;
             const female = studentsInGrade.filter(s => s.gender === Gender.FEMALE).length;
 
@@ -367,7 +419,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
                 isSubmitted: presentCount + absentCount > 0
             };
         });
-    }, [activeStudents, validAttendances]);
+    }, [activeStudents, validAttendances, getEffectiveGrade]);
 
     // Memoize filtered stats for Kindergarten and Primary
     const kStats = useMemo(() => allStats.filter(s => s.grade.includes('อนุบาล')), [allStats]);
