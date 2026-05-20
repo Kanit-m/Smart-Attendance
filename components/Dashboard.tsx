@@ -352,16 +352,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
     const hasPromotion = currentGradeToHistoricalGrade.size > 0;
 
     // Get effective grade for a student on the viewing date
-    const getEffectiveGrade = useCallback((s: { id: string; grade: string }): string => {
+    const getEffectiveGrade = useCallback((s: { id: string; grade: string; status?: string }): string => {
         const fromAttendance = studentGradeOnDate.get(s.id);
         if (fromAttendance) return fromAttendance;
         const fromPeers = currentGradeToHistoricalGrade.get(s.grade);
         if (fromPeers) return fromPeers;
+        // ACTIVE student shares grade with WITHDRAWN students who have attendance
+        // → ACTIVE student was promoted INTO this grade
+        if (s.status !== StudentStatus.WITHDRAWN && REVERSE_GRADE_MAP[s.grade]) {
+            const hasWithdrawnPeerWithAttendance = activeStudents.some(other =>
+                other.id !== s.id &&
+                other.grade === s.grade &&
+                other.status === StudentStatus.WITHDRAWN &&
+                studentGradeOnDate.get(other.id) === s.grade
+            );
+            if (hasWithdrawnPeerWithAttendance) {
+                return REVERSE_GRADE_MAP[s.grade];
+            }
+        }
         if (hasPromotion && REVERSE_GRADE_MAP[s.grade]) {
             return REVERSE_GRADE_MAP[s.grade];
         }
         return s.grade;
-    }, [studentGradeOnDate, currentGradeToHistoricalGrade, hasPromotion]);
+    }, [studentGradeOnDate, currentGradeToHistoricalGrade, hasPromotion, activeStudents]);
 
     // Memoize expensive grade statistics calculation
     const allStats = useMemo((): GradeStats[] => {

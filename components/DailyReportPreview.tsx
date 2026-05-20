@@ -77,18 +77,40 @@ export const DailyReportPreview: React.FC<DailyReportPreviewProps> = ({ students
     };
     const hasPromotion = currentGradeToHistoricalGrade.size > 0;
 
+
     // Get effective grade for a student on the report date
-    const getEffectiveGrade = (s: { id: string; grade: string }): string => {
-        // Priority 1: Has attendance record → use that grade
+    const getEffectiveGrade = (s: { id: string; grade: string; status?: string }): string => {
+        // Priority 1: Has attendance record → use that grade (most reliable)
         const fromAttendance = studentGradeOnDate.get(s.id);
         if (fromAttendance) return fromAttendance;
-        // Priority 2: Peers with same current grade have attendance → use their historical grade
+
+        // Priority 2: Peers with same current grade have attendance with DIFFERENT grade
+        // e.g., student is currently ป.4 but peers' attendance says ป.3
         const fromPeers = currentGradeToHistoricalGrade.get(s.grade);
         if (fromPeers) return fromPeers;
-        // Priority 3: Promotion detected but no peers → use reverse grade map
+
+        // Priority 3: Student is ACTIVE but shares grade with WITHDRAWN students who have
+        // attendance matching that grade. This means the ACTIVE student was promoted INTO
+        // this grade after the viewing date.
+        // e.g., ACTIVE ป.6 student + WITHDRAWN ป.6 student with attendance grade "ป.6"
+        //   → ACTIVE student was promoted from ป.5, WITHDRAWN student was genuinely ป.6
+        if (s.status !== StudentStatus.WITHDRAWN && REVERSE_GRADE_MAP[s.grade]) {
+            const hasWithdrawnPeerWithAttendance = activeStudents.some(other =>
+                other.id !== s.id &&
+                other.grade === s.grade &&
+                other.status === StudentStatus.WITHDRAWN &&
+                studentGradeOnDate.get(other.id) === s.grade
+            );
+            if (hasWithdrawnPeerWithAttendance) {
+                return REVERSE_GRADE_MAP[s.grade];
+            }
+        }
+
+        // Priority 4: Promotion detected elsewhere, try reverse grade map
         if (hasPromotion && REVERSE_GRADE_MAP[s.grade]) {
             return REVERSE_GRADE_MAP[s.grade];
         }
+
         // Fallback: current grade (no promotion or already correct)
         return s.grade;
     };
