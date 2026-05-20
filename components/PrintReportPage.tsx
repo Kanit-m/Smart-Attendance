@@ -263,7 +263,7 @@ export const PrintReportPage: React.FC = () => {
                 <div className="mb-6 flex items-center justify-between">
                     <h2 className="text-xl font-bold text-gray-800">ตั้งค่ารายงาน</h2>
                     <button
-                        onClick={() => window.close()}
+                        onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.href = '/'; }}
                         className="text-gray-500 hover:text-red-500"
                         title="ปิดหน้าต่าง"
                     >

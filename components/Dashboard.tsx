@@ -619,7 +619,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ embedded = false, students
 
                         {/* Print Report Button - Hidden on mobile */}
                         <button
-                            onClick={() => window.open(`/print-report?date=${currentDate}`, '_blank')}
+                            onClick={() => window.location.href = `/print-report?date=${currentDate}`}
                             className="hidden md:flex w-full sm:w-auto items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-blue-700 hover:shadow-md transition-all font-bold text-sm active:scale-95 border border-transparent"
                         >
                             <Printer className="w-4 h-4" />

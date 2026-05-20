@@ -1760,7 +1760,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                                     key={dateStr}
                                                     onClick={() => {
                                                         setShowAttendanceReminder(false);
-                                                        window.open(`/print-report?date=${dateStr}`, '_blank');
+                                                        window.location.href = `/print-report?date=${dateStr}`;
                                                     }}
                                                     className="w-full flex items-center justify-between p-4 bg-orange-50 hover:bg-orange-100 border border-orange-100 rounded-xl transition-all group"
                                                 >
@@ -1785,7 +1785,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                     <button
                                         onClick={() => {
                                             setShowAttendanceReminder(false);
-                                            window.open(`/print-report?date=${myMissingPrintDays[0]}`, '_blank');
+                                            window.location.href = `/print-report?date=${myMissingPrintDays[0]}`;
                                         }}
                                         className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
                                     >
@@ -1858,7 +1858,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                                 key={dateStr}
                                                 onClick={() => {
                                                     setShowMissingPrintModal(false);
-                                                    window.open(`/print-report?date=${dateStr}`, '_blank');
+                                                    window.location.href = `/print-report?date=${dateStr}`;
                                                 }}
                                                 className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 border border-red-100 rounded-xl transition-all group"
                                             >
@@ -1892,7 +1892,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                 <button
                                     onClick={() => {
                                         setShowMissingPrintModal(false);
-                                        window.open(`/print-report?date=${myMissingPrintDays[0]}`, '_blank');
+                                        window.location.href = `/print-report?date=${myMissingPrintDays[0]}`;
                                     }}
                                     className="w-full py-4 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse mb-3"
                                 >
@@ -1951,7 +1951,7 @@ export const TeacherPanel: React.FC<TeacherPanelProps> = ({ currentUser, allStud
                                             key={dateStr}
                                             onClick={() => {
                                                 setShowPrintPopover(false);
-                                                window.open(`/print-report?date=${dateStr}`, '_blank');
+                                                window.location.href = `/print-report?date=${dateStr}`;
                                             }}
                                             className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 rounded-xl transition-all group"
                                         >
